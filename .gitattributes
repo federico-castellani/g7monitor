@@ -1,0 +1,13 @@
+# Normalise line endings, so gradlew still runs on Linux/macOS/CI after a commit from Windows
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+gradlew text eol=lf
+
+# Binary files
+*.jar binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.keystore binary
+*.jks binary
