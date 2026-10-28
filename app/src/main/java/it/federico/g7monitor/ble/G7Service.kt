@@ -19,6 +19,9 @@ import it.federico.g7monitor.G7App
 import it.federico.g7monitor.MainActivity
 import it.federico.g7monitor.R
 import it.federico.g7monitor.data.DataSource
+import it.federico.g7monitor.data.DebugLog
+import it.federico.g7monitor.data.Link
+import it.federico.g7monitor.data.SensorStatus
 import it.federico.g7monitor.ui.Glucose
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -41,6 +44,8 @@ class G7Service : LifecycleService() {
     private var collector: G7Collector? = null
     private var modeScope: CoroutineScope? = null
     private var mode = DataSource.Sensor
+    /** Android refused to start this service in the foreground: don't retry until it is started again. */
+    private var refused = false
     /** Wakes the follower loop early (alarm while dozing, "Aggiorna ora"). */
     private val followKicks = Channel<Unit>(Channel.CONFLATED)
     private val app get() = G7App.instance
@@ -84,7 +89,20 @@ class G7Service : LifecycleService() {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             else -> 0
         }
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification("Avvio…", null), type)
+        try {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification("Avvio…", null), type)
+        } catch (e: RuntimeException) {
+            // e.g. Bluetooth permission missing or revoked (Android 14+ requires it for this service type),
+            // or a start from the background that Android refuses: report it instead of crashing.
+            DebugLog.log("servizio non avviato: ${e.javaClass.simpleName}: ${e.message}")
+            app.status.value = SensorStatus(
+                link = Link.Error,
+                message = if (mode == DataSource.Sensor) "Servono i permessi Bluetooth: riattiva la raccolta dati" else "Avvio non consentito da Android",
+            )
+            refused = true
+            stopSelf()
+            return
+        }
         val scope = CoroutineScope(lifecycleScope.coroutineContext + Job(lifecycleScope.coroutineContext[Job]))
         modeScope = scope
         when (mode) {
@@ -119,15 +137,11 @@ class G7Service : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_STOP -> {
-                stopMode()
-                stopSelf()
-            }
             ACTION_WATCHDOG -> collector?.kick()
             ACTION_FOLLOW -> followKicks.trySend(Unit)
             // New pairing code, forgotten sensor, or a different data source.
             ACTION_RESTART -> startMode(readMode())
-            else -> if (modeScope == null) startMode(readMode())
+            else -> if (modeScope == null && !refused) startMode(readMode())
         }
         return START_STICKY
     }
@@ -175,7 +189,6 @@ class G7Service : LifecycleService() {
 
     companion object {
         private const val NOTIFICATION_ID = 7
-        private const val ACTION_STOP = "stop"
         private const val ACTION_WATCHDOG = "watchdog"
         private const val ACTION_FOLLOW = "follow"
         private const val ACTION_RESTART = "restart"
@@ -192,8 +205,8 @@ class G7Service : LifecycleService() {
         fun followNow(context: Context) =
             context.startService(Intent(context, G7Service::class.java).setAction(ACTION_FOLLOW))
 
-        fun stop(context: Context) =
-            context.startService(Intent(context, G7Service::class.java).setAction(ACTION_STOP))
+        /** stopService never creates the service (a "stop" command did, and the new instance then crashed). */
+        fun stop(context: Context) = context.stopService(Intent(context, G7Service::class.java))
     }
 }
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">G7 Monitor</string>
+    <string name="complication_glucose">Glicemia</string>
+    <string name="complication_delta">Glicemia: variazione</string>
+    <string name="complication_age">Glicemia: ultima lettura</string>
+</resources>

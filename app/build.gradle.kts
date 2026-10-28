@@ -59,6 +59,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // QR scanner UI provided by Google Play services: no camera permission needed
     implementation(libs.play.services.code.scanner)
+    // Wear OS Data Layer: sends the latest reading to the watch complications
+    implementation(libs.play.services.wearable)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

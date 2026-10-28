@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "G7Monitor"
 include(":app")
+include(":wear")

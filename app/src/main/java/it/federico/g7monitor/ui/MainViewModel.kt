@@ -12,6 +12,7 @@ import it.federico.g7monitor.ble.BondHelper
 import it.federico.g7monitor.ble.G7Service
 import it.federico.g7monitor.data.AppSettings
 import it.federico.g7monitor.data.DataSource
+import it.federico.g7monitor.data.DebugLog
 import it.federico.g7monitor.data.GlucoseReading
 import it.federico.g7monitor.data.Link
 import it.federico.g7monitor.data.SensorStatus
@@ -193,6 +194,7 @@ class MainViewModel : ViewModel() {
                     app.settings.setServer(url, paired.username, paired.token)
                     app.readings.markAllPending()
                     onResult(ServerResult.Ok(url))
+                    restoreFromServer(url, paired.token)
                     app.uploader.maybeUpload(force = true)
                 }
                 ServerPurpose.Follow -> {
@@ -209,6 +211,19 @@ class MainViewModel : ViewModel() {
                 else ServerResult.Error(describe(e))
             )
         }
+    }
+
+    /**
+     * After a reset the phone only gets the last 24 h back from the sensor's backfill, if that:
+     * download them from the server too, so the chart is complete at once. They are stored as
+     * already uploaded; where the phone has its own reading for the same moment, that one is kept
+     * (local ±2 min de-duplication) and the server ignores it as a duplicate when it is sent.
+     */
+    private suspend fun restoreFromServer(url: String, token: String) {
+        val since = System.currentTimeMillis() - 24 * 3_600_000L
+        val rows = withContext(Dispatchers.IO) { runCatching { ServerApi.fetchSince(url, token, since) }.getOrNull() } ?: return
+        val added = app.readings.insertAll(rows, fromServer = true)
+        if (added > 0) DebugLog.log("server: ripristinate $added letture delle ultime 24 ore")
     }
 
     private fun describe(e: Throwable): String = when (e) {

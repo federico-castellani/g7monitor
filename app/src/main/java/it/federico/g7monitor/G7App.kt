@@ -11,10 +11,14 @@ import it.federico.g7monitor.data.SensorStatus
 import it.federico.g7monitor.data.SettingsRepository
 import it.federico.g7monitor.net.Follower
 import it.federico.g7monitor.net.Uploader
+import it.federico.g7monitor.watch.WatchSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** Manual dependency container: the app is small enough not to need a DI framework. */
@@ -30,6 +34,8 @@ class G7App : Application() {
     lateinit var alarmSettings: AlarmRepository
         private set
     lateinit var alarms: AlarmEngine
+        private set
+    lateinit var watch: WatchSync
         private set
 
     /** Live collector status, written by the BLE service, read by the UI. */
@@ -47,6 +53,7 @@ class G7App : Application() {
         follower = Follower(this)
         alarmSettings = AlarmRepository(this)
         alarms = AlarmEngine(this)
+        watch = WatchSync(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_STATUS, "Glicemia in corso", NotificationManager.IMPORTANCE_LOW).apply {
@@ -65,6 +72,9 @@ class G7App : Application() {
         )
         // Every new reading, from the sensor or from the server, is checked against the alarms.
         scope.launch { readings.changes.collect { alarms.evaluate() } }
+        // ...and sent to the watch complications (again when unit or target range change).
+        val display = settings.settings.map { Triple(it.useMmol, it.lowMgdl, it.highMgdl) }.distinctUntilChanged()
+        scope.launch { combine(readings.changes, display) { _, _ -> }.collect { watch.push() } }
     }
 
     companion object {

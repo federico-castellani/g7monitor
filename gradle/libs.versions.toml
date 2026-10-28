@@ -10,6 +10,9 @@ datastore = "1.1.7"
 junit = "4.13.2"
 orgJson = "20240303"
 codeScanner = "16.1.0"
+playServicesWearable = "19.0.0"
+wearCompose = "1.5.6"
+wearComplications = "1.2.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -31,6 +34,12 @@ play-services-code-scanner = { group = "com.google.android.gms", name = "play-se
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 # real org.json for JVM unit tests (Android's copy is only a stub there)
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
+
+# Wear OS (watch module and the phone side of the Data Layer)
+play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
+androidx-wear-compose-material = { group = "androidx.wear.compose", name = "compose-material", version.ref = "wearCompose" }
+androidx-wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wearCompose" }
+androidx-wear-complications-data-source = { group = "androidx.wear.watchface", name = "watchface-complications-data-source-ktx", version.ref = "wearComplications" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

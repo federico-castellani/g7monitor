@@ -1,0 +1,9 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- glucose trace -->
+    <path android:strokeColor="#FF6EE7C8" android:strokeWidth="5" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M30,64 L42,58 L50,66 L60,46 L68,52 L78,40" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M78,40m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+</vector>

@@ -22,7 +22,10 @@ App Android moderna per leggere la glicemia direttamente da un **Dexcom G7** via
 - Import del certificato G7 ("G Key" di xDrip) scansionando il QR code
 - Schermata **Diagnostica**: stato del collegamento, dispositivi Bluetooth vicini in tempo reale, registro eventi copiabile
 - **Due modalità**, scelte al primo avvio e modificabili da *Impostazioni → Origine dei dati*. Ognuna mostra solo le proprie impostazioni:
-  - **Sensore G7**: il telefono si collega al sensore. Il server è facoltativo: da *Impostazioni → Server (caricamento)* si inserisce l'indirizzo e, se il server risponde, le credenziali; da quel momento le glicemie vengono caricate. Il caricamento parte subito dopo ogni lettura, senza risvegli extra; a scelta ogni 15/30/60 minuti o solo con Wi-Fi.
+  - **Sensore G7**: il telefono si collega al sensore. Il server è facoltativo: da *Impostazioni → Server (caricamento)* si inserisce l'indirizzo e, se il server risponde, le credenziali; da quel momento le glicemie vengono caricate. Il caricamento parte subito dopo ogni lettura, senza risvegli extra; a scelta ogni 15/30/60 minuti o solo con Wi-Fi. Quando colleghi o ricolleghi il server, ad esempio dopo un reset, il telefono:
+    - scarica dal server le ultime 24 ore, così il grafico è subito completo;
+    - invia tutte le letture che ha;
+    - lascia che il server scarti i doppioni.
   - **Server**: il telefono riceve le glicemie da un **G7 Monitor Server** (progetto separato), senza sensore. Basta un account in sola lettura. Il telefono chiede i dati solo quando è attesa una nuova lettura, circa ogni 5 minuti, senza tenere una connessione sempre aperta.
 - Verso il server solo HTTPS, con un codice di accesso revocabile per ogni telefono. La password non resta sul telefono.
 
@@ -54,6 +57,37 @@ Requisiti: Android Studio recente, **JDK 21** come Gradle JDK (*Settings → Bui
 - **Altri dispositivi collegati al sensore** (microinfusore, ricevitore) continuano a funzionare: l'app usa lo stesso canale di autenticazione di xDrip (slot 2).
 - **Problemi?** Apri *Diagnostica* (icona in alto nella Home): mostra se il G7 è visibile, lo stato del collegamento e, con *Mostra registro eventi*, ogni passo dell'autenticazione. Il pulsante *Copia* permette di condividere il registro. Lo stesso registro è in Logcat con il filtro `G7Collector`.
 
+## Smartwatch Wear OS (complicazioni)
+
+Il modulo `wear` è un'app per l'orologio, come GlucoDataHandler: riceve la glicemia dal telefono e la espone come **complicazioni** da aggiungere ai quadranti, compresi quelli Samsung. Funziona in entrambe le modalità del telefono, sensore e server.
+
+| Complicazione | Tipi | Mostra |
+|---|---|---|
+| **Glicemia** | testo breve, testo lungo, indicatore | `123↗` con i minuti dall'ultima lettura; `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
+| **Glicemia: variazione** | testo breve | `+4` rispetto alla lettura precedente |
+| **Glicemia: ultima lettura** | testo breve | minuti dall'ultima lettura |
+
+Batteria:
+- l'orologio non chiede mai dati: è il telefono a inviarli, uno per lettura;
+- i minuti trascorsi li conta il quadrante da solo;
+- dopo 15 minuti senza letture il valore diventa `---` senza bisogno di svegliare l'orologio.
+
+Toccando una complicazione si apre la schermata della glicemia sull'orologio.
+
+### Installazione sull'orologio (Galaxy Watch 4 o successivo, Wear OS 3+)
+Telefono e orologio devono avere app con lo stesso nome di pacchetto e **la stessa firma**: installa le due app compilate dallo stesso PC, oppure scaricate entrambe dalla stessa esecuzione della CI.
+
+1. Sull'orologio: *Impostazioni → Info sull'orologio → Informazioni sul software*, tocca 5 volte *Versione software*. Poi *Opzioni sviluppatore → Debug ADB* e *Debug wireless*.
+2. Dal PC, sulla stessa rete Wi-Fi, usa i dati mostrati dall'orologio in *Debug wireless*:
+   ```
+   adb pair IP:PORTA_ABBINAMENTO      (codice mostrato sull'orologio)
+   adb connect IP:PORTA
+   adb -s IP:PORTA install wear/build/outputs/apk/release/wear-release.apk
+   ```
+3. Sul quadrante: tieni premuto → *Personalizza* → tocca una complicazione → *G7 Monitor* → scegli *Glicemia*, *Glicemia: variazione* o *Glicemia: ultima lettura*.
+
+I dati arrivano alla prossima lettura, oppure subito se apri G7 Monitor sull'orologio.
+
 ## Struttura
 
 ```
@@ -70,7 +104,16 @@ app/src/main/java/it/federico/g7monitor/
 │   ├── BondHelper.kt    # abbinamento Bluetooth
 │   └── G7Service.kt     # foreground service, notifica, watchdog, avvio al boot
 ├── data/                # SQLite letture, impostazioni, stato sensore, registro eventi
-└── ui/                  # Compose: Home, grafico, Impostazioni, Diagnostica, componenti, tema
+├── net/                 # server G7 Monitor: caricamento (Uploader) e ricezione (Follower)
+├── alarm/               # allarmi: regole (Kotlin puro), motore, suono e vibrazione
+├── watch/               # invio della glicemia allo smartwatch (Wear OS Data Layer)
+└── ui/                  # Compose: Home, grafico, Impostazioni, server, allarmi, Diagnostica
+
+wear/src/main/java/it/federico/g7monitor/wear/
+├── DataLayerListenerService.kt   # riceve le letture dal telefono
+├── WatchGlucose.kt               # ultima lettura e formattazione
+├── complication/                 # le tre complicazioni
+└── MainActivity.kt               # schermata della glicemia sull'orologio
 ```
 
 ### Corrispondenza con il codice di xDrip

@@ -28,5 +28,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: g7monitor-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: g7monitor-debug-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            wear/build/outputs/apk/debug/*.apk
