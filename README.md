@@ -13,9 +13,18 @@ App Android moderna per leggere la glicemia direttamente da un **Dexcom G7** via
 - Statistiche: tempo in target, media, numero letture
 - Stato sensore: riscaldamento (30 min), giorno di utilizzo, scadenza (10 giorni + 12 h)
 - Notifica persistente con l'ultima glicemia, riavvio automatico dopo il reboot
+- **Allarmi**: molto bassa, bassa, alta, molto alta, discesa rapida, salita rapida, mancanza di segnale.
+  - Ognuno ha soglia, durata del posticipo, suono, volume e modalità (suono e vibrazione, solo vibrazione, solo suono) configurabili.
+  - Suonano sul canale "sveglia", anche in silenzioso, con una pagina a tutto schermo sopra la schermata di blocco. Se nessuno reagisce risuonano a ogni nuova lettura.
+  - Per **disattivare** un allarme serve lo sblocco del telefono (PIN, sequenza, password o biometria).
+  - I suoni sono generati da `tools/gen_alarm_sounds.py`.
 - mg/dL o mmol/L, intervallo target configurabile, tema chiaro/scuro con colori dinamici (Material You)
 - Import del certificato G7 ("G Key" di xDrip) scansionando il QR code
 - Schermata **Diagnostica**: stato del collegamento, dispositivi Bluetooth vicini in tempo reale, registro eventi copiabile
+- **Due modalità**, scelte al primo avvio e modificabili da *Impostazioni → Origine dei dati*. Ognuna mostra solo le proprie impostazioni:
+  - **Sensore G7**: il telefono si collega al sensore. Il server è facoltativo: da *Impostazioni → Server (caricamento)* si inserisce l'indirizzo e, se il server risponde, le credenziali; da quel momento le glicemie vengono caricate. Il caricamento parte subito dopo ogni lettura, senza risvegli extra; a scelta ogni 15/30/60 minuti o solo con Wi-Fi.
+  - **Server**: il telefono riceve le glicemie da un **G7 Monitor Server** (progetto separato), senza sensore. Basta un account in sola lettura. Il telefono chiede i dati solo quando è attesa una nuova lettura, circa ogni 5 minuti, senza tenere una connessione sempre aperta.
+- Verso il server solo HTTPS, con un codice di accesso revocabile per ogni telefono. La password non resta sul telefono.
 
 ## Tecnologie
 
@@ -33,7 +42,8 @@ Requisiti: Android Studio recente, **JDK 21** come Gradle JDK (*Settings → Bui
 2. Attendi la sincronizzazione Gradle (scarica le dipendenze la prima volta).
 3. Collega il telefono con il *debug USB* attivo e premi **Run ▶**.
    In alternativa: `gradlew assembleDebug` e installa `app/build/outputs/apk/debug/app-debug.apk`.
-4. Nell'app: ⚙️ **Impostazioni** → inserisci il **codice di abbinamento** (sull'applicatore del G7) → *Salva codice* → attiva **Raccolta dati** e concedi i permessi Bluetooth e notifiche.
+4. Al primo avvio scegli **Dal sensore G7** (oppure **Dal server** per ricevere le glicemie di un'altra persona, e segui le schermate indirizzo → credenziali).
+   Poi ⚙️ **Impostazioni** → inserisci il **codice di abbinamento** (sull'applicatore del G7) → *Salva codice* → attiva **Raccolta dati** e concedi i permessi Bluetooth e notifiche.
 5. Consigliato: in *Affidabilità* premi **Consenti** per disattivare l'ottimizzazione batteria.
 6. Al primo collegamento Android può chiedere di **abbinare** il dispositivo `DXCM…`: accetta.
 

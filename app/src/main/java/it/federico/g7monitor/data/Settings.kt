@@ -14,7 +14,18 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore("settings")
 
+/** Where this phone gets the readings from. Each mode shows only its own settings. */
+enum class DataSource {
+    /** Bluetooth from the G7; optional upload to a server. */
+    Sensor,
+
+    /** Downloaded from a G7 Monitor server (follower). */
+    Server,
+}
+
 data class AppSettings(
+    /** null until the user picks one on the welcome screen. */
+    val dataSource: DataSource? = null,
     val pairingCode: String = "",
     val useMmol: Boolean = false,
     val lowMgdl: Int = 70,
@@ -25,8 +36,25 @@ data class AppSettings(
     val certP1: String = "",
     val certP2: String = "",
     val certP3: String = "",
+    /** G7 Monitor server (https base URL), account name and this phone's upload token. */
+    val serverUrl: String = "",
+    val serverUser: String = "",
+    val serverToken: String = "",
+    /** Minimum minutes between uploads; 5 = every reading. */
+    val uploadIntervalMin: Int = 5,
+    val uploadWifiOnly: Boolean = false,
+    val lastUploadAt: Long? = null,
+    val uploadError: String? = null,
+    /** Follower mode: server to download from, account and read-only token. */
+    val followUrl: String = "",
+    val followUser: String = "",
+    val followToken: String = "",
+    val lastFollowAt: Long? = null,
+    val followError: String? = null,
 ) {
     val hasCertificates get() = certP1.isNotBlank() && certP2.isNotBlank() && certP3.isNotBlank()
+    val serverConnected get() = serverUrl.isNotBlank() && serverToken.isNotBlank()
+    val followConnected get() = followUrl.isNotBlank() && followToken.isNotBlank()
 }
 
 class SettingsRepository(private val context: Context) {
@@ -41,6 +69,19 @@ class SettingsRepository(private val context: Context) {
         val p1 = stringPreferencesKey("keks_p1")
         val p2 = stringPreferencesKey("keks_p2")
         val p3 = stringPreferencesKey("keks_p3")
+        val serverUrl = stringPreferencesKey("server_url")
+        val serverUser = stringPreferencesKey("server_user")
+        val serverToken = stringPreferencesKey("server_token")
+        val uploadInterval = intPreferencesKey("upload_interval_min")
+        val wifiOnly = booleanPreferencesKey("upload_wifi_only")
+        val lastUpload = longPreferencesKey("last_upload_at")
+        val uploadError = stringPreferencesKey("upload_error")
+        val source = stringPreferencesKey("data_source")
+        val followUrl = stringPreferencesKey("follow_url")
+        val followUser = stringPreferencesKey("follow_user")
+        val followToken = stringPreferencesKey("follow_token")
+        val lastFollow = longPreferencesKey("last_follow_at")
+        val followError = stringPreferencesKey("follow_error")
         fun key(mac: String) = stringPreferencesKey("key_$mac")
         fun blocked(mac: String) = longPreferencesKey("blocked_$mac")
     }
@@ -50,6 +91,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun current(): AppSettings = settings.first()
 
     private fun Preferences.toSettings() = AppSettings(
+        // Installs from before the choice existed already use the sensor.
+        dataSource = this[K.source]?.let { v -> DataSource.entries.firstOrNull { it.name == v } }
+            ?: if (this[K.code] != null) DataSource.Sensor else null,
         pairingCode = this[K.code] ?: "",
         useMmol = this[K.mmol] ?: false,
         lowMgdl = this[K.low] ?: 70,
@@ -60,7 +104,41 @@ class SettingsRepository(private val context: Context) {
         certP1 = this[K.p1] ?: "",
         certP2 = this[K.p2] ?: "",
         certP3 = this[K.p3] ?: "",
+        serverUrl = this[K.serverUrl] ?: "",
+        serverUser = this[K.serverUser] ?: "",
+        serverToken = this[K.serverToken] ?: "",
+        uploadIntervalMin = this[K.uploadInterval] ?: 5,
+        uploadWifiOnly = this[K.wifiOnly] ?: false,
+        lastUploadAt = this[K.lastUpload],
+        uploadError = this[K.uploadError],
+        followUrl = this[K.followUrl] ?: "",
+        followUser = this[K.followUser] ?: "",
+        followToken = this[K.followToken] ?: "",
+        lastFollowAt = this[K.lastFollow],
+        followError = this[K.followError],
     )
+
+    suspend fun setDataSource(source: DataSource) = context.dataStore.edit { it[K.source] = source.name }
+
+    suspend fun setFollow(url: String, user: String, token: String) = context.dataStore.edit {
+        it[K.followUrl] = url
+        it[K.followUser] = user
+        it[K.followToken] = token
+        it.remove(K.lastFollow)
+        it.remove(K.followError)
+    }
+
+    /** Forgets the token (the address stays, to reconnect easily). */
+    suspend fun disconnectFollow(error: String?) = context.dataStore.edit {
+        it.remove(K.followToken)
+        it.remove(K.lastFollow)
+        if (error == null) it.remove(K.followError) else it[K.followError] = error
+    }
+
+    suspend fun setFollowResult(at: Long?, error: String?) = context.dataStore.edit {
+        if (at != null) it[K.lastFollow] = at
+        if (error == null) it.remove(K.followError) else it[K.followError] = error
+    }
 
     /** Changing the code means a new sensor: forget the old one. */
     suspend fun setPairingCode(code: String) = context.dataStore.edit {
@@ -78,6 +156,30 @@ class SettingsRepository(private val context: Context) {
     suspend fun setSessionStart(t: Long?) = context.dataStore.edit { if (t == null) it.remove(K.session) else it[K.session] = t }
     suspend fun setCertificates(p1: String, p2: String, p3: String) = context.dataStore.edit {
         it[K.p1] = p1.trim(); it[K.p2] = p2.trim(); it[K.p3] = p3.trim()
+    }
+
+    suspend fun setServer(url: String, user: String, token: String) = context.dataStore.edit {
+        it[K.serverUrl] = url
+        it[K.serverUser] = user
+        it[K.serverToken] = token
+        it.remove(K.lastUpload)
+        it.remove(K.uploadError)
+    }
+
+    /** Forgets the token (the address stays, to reconnect easily). */
+    suspend fun disconnectServer(error: String?) = context.dataStore.edit {
+        it.remove(K.serverToken)
+        it.remove(K.lastUpload)
+        if (error == null) it.remove(K.uploadError) else it[K.uploadError] = error
+    }
+
+    suspend fun setUploadInterval(minutes: Int) = context.dataStore.edit { it[K.uploadInterval] = minutes }
+    suspend fun setUploadWifiOnly(v: Boolean) = context.dataStore.edit { it[K.wifiOnly] = v }
+
+    /** Written only when something changes, to keep DataStore writes rare. */
+    suspend fun setUploadResult(at: Long?, error: String?) = context.dataStore.edit {
+        if (at != null) it[K.lastUpload] = at
+        if (error == null) it.remove(K.uploadError) else it[K.uploadError] = error
     }
 
     suspend fun authKey(mac: String): String? = context.dataStore.data.first()[K.key(mac)]

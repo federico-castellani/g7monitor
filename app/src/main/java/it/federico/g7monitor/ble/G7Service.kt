@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -17,29 +18,36 @@ import androidx.lifecycle.lifecycleScope
 import it.federico.g7monitor.G7App
 import it.federico.g7monitor.MainActivity
 import it.federico.g7monitor.R
+import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.ui.Glucose
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Foreground service hosting the [G7Collector]. Type "connectedDevice" keeps the
- * Bluetooth session alive while the screen is off.
+ * Foreground service that keeps the readings coming with the screen off:
+ * - sensor mode: hosts the [G7Collector] (type "connectedDevice", Bluetooth) and the uploader
+ * - server mode: downloads from the server with the [it.federico.g7monitor.net.Follower] (type "specialUse")
  */
 class G7Service : LifecycleService() {
 
-    private lateinit var collector: G7Collector
+    private var collector: G7Collector? = null
+    private var modeScope: CoroutineScope? = null
+    private var mode = DataSource.Sensor
+    /** Wakes the follower loop early (alarm while dozing, "Aggiorna ora"). */
+    private val followKicks = Channel<Unit>(Channel.CONFLATED)
     private val app get() = G7App.instance
 
     override fun onCreate() {
         super.onCreate()
-        ServiceCompat.startForeground(
-            this, NOTIFICATION_ID, buildNotification("Avvio…", null),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
-        )
-        collector = G7Collector(this, lifecycleScope)
-        collector.start()
+        startMode(readMode())
 
         lifecycleScope.launch {
             val mmol = app.settings.settings.map { it.useMmol }.distinctUntilChanged()
@@ -57,7 +65,7 @@ class G7Service : LifecycleService() {
                 .collect { (title, text, readingTime) ->
                     getSystemService(NotificationManager::class.java)
                         .notify(NOTIFICATION_ID, buildNotification(title, text, readingTime))
-                    if (readingTime != null && readingTime != watchdogFor) {
+                    if (mode == DataSource.Sensor && readingTime != null && readingTime != watchdogFor) {
                         watchdogFor = readingTime
                         scheduleWatchdog()
                     }
@@ -65,27 +73,67 @@ class G7Service : LifecycleService() {
         }
     }
 
+    /** DataStore keeps the settings in memory after the first read: this is a quick local read. */
+    private fun readMode(): DataSource = runBlocking { app.settings.current().dataSource } ?: DataSource.Sensor
+
+    private fun startMode(newMode: DataSource) {
+        stopMode()
+        mode = newMode
+        val type = when {
+            mode == DataSource.Sensor -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            else -> 0
+        }
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification("Avvio…", null), type)
+        val scope = CoroutineScope(lifecycleScope.coroutineContext + Job(lifecycleScope.coroutineContext[Job]))
+        modeScope = scope
+        when (mode) {
+            DataSource.Sensor -> {
+                collector = G7Collector(this, scope).also { it.start() }
+                // Upload right after new readings are stored, while the phone is awake anyway (also catches up at start).
+                scope.launch { app.readings.changes.collect { app.uploader.maybeUpload() } }
+            }
+            DataSource.Server -> scope.launch { follow() }
+        }
+    }
+
+    private fun stopMode() {
+        collector?.stop()
+        collector = null
+        modeScope?.cancel()
+        modeScope = null
+        cancelAlarm(watchdogIntent())
+        cancelAlarm(followIntent())
+    }
+
+    /** One request per expected reading; the alarm only matters when Doze delays the coroutine timer. */
+    private suspend fun follow() {
+        while (true) {
+            app.follower.sync()
+            val wait = app.follower.nextDelay()
+            setAlarm(followIntent(), wait)
+            withTimeoutOrNull(wait) { followKicks.receive() }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_STOP -> {
-                collector.stop()
+                stopMode()
                 stopSelf()
             }
-            ACTION_WATCHDOG -> collector.kick()
-            ACTION_RESTART -> {
-                collector.stop()
-                collector = G7Collector(this, lifecycleScope)
-                collector.start()
-            }
-            else -> collector.start()
+            ACTION_WATCHDOG -> collector?.kick()
+            ACTION_FOLLOW -> followKicks.trySend(Unit)
+            // New pairing code, forgotten sensor, or a different data source.
+            ACTION_RESTART -> startMode(readMode())
+            else -> if (modeScope == null) startMode(readMode())
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
-        collector.stop()
-        cancelWatchdog()
+        stopMode()
         super.onDestroy()
     }
 
@@ -106,35 +154,43 @@ class G7Service : LifecycleService() {
             .build()
     }
 
-    private fun watchdogIntent() = PendingIntent.getService(
-        this, 1, Intent(this, G7Service::class.java).setAction(ACTION_WATCHDOG),
+    private fun serviceIntent(requestCode: Int, action: String) = PendingIntent.getService(
+        this, requestCode, Intent(this, G7Service::class.java).setAction(action),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    private fun watchdogIntent() = serviceIntent(1, ACTION_WATCHDOG)
+    private fun followIntent() = serviceIntent(2, ACTION_FOLLOW)
+
     /** Inexact, doze-friendly fallback in case the sensor is not seen for a while. */
-    private fun scheduleWatchdog() {
+    private fun scheduleWatchdog() = setAlarm(watchdogIntent(), 12 * 60_000L)
+
+    private fun setAlarm(intent: PendingIntent, delayMs: Long) {
         getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            SystemClock.elapsedRealtime() + 12 * 60_000L,
-            watchdogIntent(),
+            AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + delayMs, intent,
         )
     }
 
-    private fun cancelWatchdog() = getSystemService(AlarmManager::class.java).cancel(watchdogIntent())
+    private fun cancelAlarm(intent: PendingIntent) = getSystemService(AlarmManager::class.java).cancel(intent)
 
     companion object {
         private const val NOTIFICATION_ID = 7
         private const val ACTION_STOP = "stop"
         private const val ACTION_WATCHDOG = "watchdog"
+        private const val ACTION_FOLLOW = "follow"
         private const val ACTION_RESTART = "restart"
 
         fun start(context: Context) =
             ContextCompat.startForegroundService(context, Intent(context, G7Service::class.java))
 
-        /** Re-reads settings from scratch (new pairing code, forgotten sensor). */
+        /** Re-reads settings from scratch (new pairing code, forgotten sensor, other data source). */
         fun restart(context: Context) = ContextCompat.startForegroundService(
             context, Intent(context, G7Service::class.java).setAction(ACTION_RESTART),
         )
+
+        /** "Aggiorna ora" in follower mode. */
+        fun followNow(context: Context) =
+            context.startService(Intent(context, G7Service::class.java).setAction(ACTION_FOLLOW))
 
         fun stop(context: Context) =
             context.startService(Intent(context, G7Service::class.java).setAction(ACTION_STOP))

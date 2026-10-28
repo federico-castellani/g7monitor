@@ -24,7 +24,7 @@ data class GlucoseReading(
  * no annotation processing needed. Readings within ±2 minutes are de-duplicated.
  */
 class ReadingStore(context: Context) :
-    SQLiteOpenHelper(context, "readings.db", null, 1) {
+    SQLiteOpenHelper(context, "readings.db", null, 2) {
 
     private val _changes = MutableStateFlow(0L)
 
@@ -33,11 +33,19 @@ class ReadingStore(context: Context) :
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
-            "CREATE TABLE readings (ts INTEGER PRIMARY KEY, mgdl INTEGER NOT NULL, trend REAL, source INTEGER NOT NULL)"
+            "CREATE TABLE readings (ts INTEGER PRIMARY KEY, mgdl INTEGER NOT NULL, trend REAL, source INTEGER NOT NULL, " +
+                "uploaded INTEGER NOT NULL DEFAULT 0)"
         )
+        db.execSQL(PENDING_INDEX)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            // Server upload: a flag rather than a time cursor, so backfilled (older) readings are sent too.
+            db.execSQL("ALTER TABLE readings ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(PENDING_INDEX)
+        }
+    }
 
     init {
         // WAL: the UI can read while the service writes, and commits are cheaper.
@@ -49,16 +57,17 @@ class ReadingStore(context: Context) :
 
     /**
      * Inserts in a single transaction (one disk sync for a whole backfill) and notifies
-     * observers once. @return how many readings were new.
+     * observers once. @param fromServer readings downloaded in follower mode: never uploaded back.
+     * @return how many readings were new.
      */
-    suspend fun insertAll(list: List<GlucoseReading>): Int = withContext(Dispatchers.IO) {
+    suspend fun insertAll(list: List<GlucoseReading>, fromServer: Boolean = false): Int = withContext(Dispatchers.IO) {
         if (list.isEmpty()) return@withContext 0
         val db = writableDatabase
         var added = 0
         db.beginTransaction()
         try {
             val dupCheck = db.compileStatement("SELECT COUNT(*) FROM readings WHERE ts BETWEEN ? AND ?")
-            val values = ContentValues(4)
+            val values = ContentValues(5)
             for (r in list) {
                 dupCheck.bindLong(1, r.timestamp - DEDUPE_MS)
                 dupCheck.bindLong(2, r.timestamp + DEDUPE_MS)
@@ -68,6 +77,7 @@ class ReadingStore(context: Context) :
                 values.put("mgdl", r.mgdl)
                 if (r.trend != null) values.put("trend", r.trend) else values.putNull("trend")
                 values.put("source", r.source.ordinal)
+                values.put("uploaded", if (fromServer) 1 else 0)
                 if (db.insert("readings", null, values) != -1L) added++
             }
             dupCheck.close()
@@ -84,8 +94,39 @@ class ReadingStore(context: Context) :
     suspend fun latest(): GlucoseReading? =
         query("WHERE ts >= ? ORDER BY ts DESC LIMIT 1", System.currentTimeMillis() - 30 * 60_000L).firstOrNull()
 
-    private suspend fun query(where: String, from: Long): List<GlucoseReading> = withContext(Dispatchers.IO) {
-        readableDatabase.rawQuery("SELECT ts, mgdl, trend, source FROM readings $where", arrayOf(from.toString())).use { c ->
+    /** Time of the newest stored reading, or null when there is none. */
+    suspend fun newestTimestamp(): Long? = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT MAX(ts) FROM readings", null).use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
+    }
+
+    /** Oldest readings not yet sent to the server. */
+    suspend fun pendingUpload(limit: Int): List<GlucoseReading> = query("WHERE uploaded = 0 ORDER BY ts LIMIT ?", limit.toLong())
+
+    suspend fun markUploaded(list: List<GlucoseReading>) = withContext(Dispatchers.IO) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val update = db.compileStatement("UPDATE readings SET uploaded = 1 WHERE ts = ?")
+            for (r in list) {
+                update.bindLong(1, r.timestamp)
+                update.executeUpdateDelete()
+            }
+            update.close()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** New server or account: everything stored locally is sent again (the server ignores duplicates). */
+    suspend fun markAllPending() = withContext(Dispatchers.IO) {
+        writableDatabase.execSQL("UPDATE readings SET uploaded = 0 WHERE uploaded != 0")
+    }
+
+    private suspend fun query(where: String, arg: Long): List<GlucoseReading> = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT ts, mgdl, trend, source FROM readings $where", arrayOf(arg.toString())).use { c ->
             buildList(c.count) {
                 while (c.moveToNext()) add(
                     GlucoseReading(
@@ -105,5 +146,6 @@ class ReadingStore(context: Context) :
 
     companion object {
         private const val DEDUPE_MS = 2 * 60_000L
+        private const val PENDING_INDEX = "CREATE INDEX readings_pending ON readings(ts) WHERE uploaded = 0"
     }
 }

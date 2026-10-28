@@ -24,12 +24,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Sensors
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -66,6 +70,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import it.federico.g7monitor.data.AppSettings
+import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.protocol.G7Certificates
 import it.federico.g7monitor.ui.Glucose
 import it.federico.g7monitor.ui.components.SectionCard
@@ -79,6 +84,10 @@ class SettingsActions(
     val onRange: (Int, Int) -> Unit,
     val onCertificates: (String, String, String) -> Unit,
     val onForget: () -> Unit,
+    val onDataSource: (DataSource) -> Unit,
+    /** Opens the server pages (setup or status) for the current mode. */
+    val onOpenServer: () -> Unit,
+    val onOpenAlarms: () -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,10 +111,21 @@ fun SettingsScreen(settings: AppSettings, actions: SettingsActions, onBack: () -
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SensorSection(settings, actions)
-            DisplaySection(settings, actions)
-            BatterySection()
-            CertificateSection(settings, actions)
+            DataSourceSection(settings, actions)
+            // Each mode shows only its own settings.
+            if (settings.dataSource == DataSource.Server) {
+                ServerLinkSection(settings, actions)
+                AlarmsSection(actions)
+                DisplaySection(settings, actions)
+                BatterySection()
+            } else {
+                SensorSection(settings, actions)
+                ServerLinkSection(settings, actions)
+                AlarmsSection(actions)
+                DisplaySection(settings, actions)
+                BatterySection()
+                CertificateSection(settings, actions)
+            }
             Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.Top) {
                 Icon(
                     Icons.Outlined.Info, contentDescription = null,
@@ -209,6 +229,83 @@ private fun DisplaySection(settings: AppSettings, actions: SettingsActions) {
     }
 }
 
+@Composable
+private fun DataSourceSection(settings: AppSettings, actions: SettingsActions) {
+    var pending by remember { mutableStateOf<DataSource?>(null) }
+    SectionCard("Origine dei dati", Icons.Outlined.SwapHoriz) {
+        val options = listOf(DataSource.Sensor to "Sensore G7", DataSource.Server to "Server")
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { i, (source, label) ->
+                SegmentedButton(
+                    selected = settings.dataSource == source,
+                    onClick = { if (settings.dataSource != source) pending = source },
+                    shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                ) { Text(label) }
+            }
+        }
+        Text(
+            if (settings.dataSource == DataSource.Server) "Le glicemie arrivano da un server G7 Monitor: il telefono non si collega al sensore."
+            else "Il telefono si collega al sensore via Bluetooth. Il server è facoltativo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    pending?.let { source ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            icon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
+            title = { Text(if (source == DataSource.Server) "Ricevere dal server?" else "Usare il sensore?") },
+            text = {
+                Text(
+                    if (source == DataSource.Server) "Il collegamento al sensore si interrompe e le glicemie arriveranno dal server. Le impostazioni del sensore restano salvate."
+                    else "La ricezione dal server si interrompe e il telefono userà il sensore G7. Il collegamento al server resta salvato."
+                )
+            },
+            confirmButton = { TextButton(onClick = { pending = null; actions.onDataSource(source) }) { Text("Cambia") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("Annulla") } },
+        )
+    }
+}
+
+@Composable
+private fun AlarmsSection(actions: SettingsActions) {
+    SectionCard("Allarmi", Icons.Outlined.NotificationsActive) {
+        Text(
+            "Glicemia bassa e alta, molto bassa e molto alta, variazioni rapide e mancanza di segnale: " +
+                "soglie, suoni e vibrazione per ciascuno.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        FilledTonalButton(onClick = actions.onOpenAlarms) { Text("Gestisci allarmi") }
+    }
+}
+
+/** Entry to the server pages: address and credentials when not linked, status when linked. */
+@Composable
+private fun ServerLinkSection(settings: AppSettings, actions: SettingsActions) {
+    val follow = settings.dataSource == DataSource.Server
+    val connected = if (follow) settings.followConnected else settings.serverConnected
+    val error = if (follow) settings.followError else settings.uploadError
+    SectionCard(if (follow) "Server (ricezione)" else "Server (caricamento)", Icons.Outlined.Cloud) {
+        if (connected) {
+            SettingRow(
+                Icons.Outlined.CloudDone,
+                "Collegato come ${if (follow) settings.followUser else settings.serverUser}",
+                (if (follow) settings.followUrl else settings.serverUrl).removePrefix("https://"),
+                iconTint = LocalRangeColors.current.inRange,
+            )
+        } else {
+            Text(
+                if (follow) "Collega il server da cui ricevere le glicemie."
+                else "Facoltativo: carica le glicemie su un server G7 Monitor per vederle dal browser e condividerle. " +
+                    "Senza server l'app funziona normalmente.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        FilledTonalButton(onClick = actions.onOpenServer) { Text(if (connected) "Gestisci" else "Configura server") }
+    }
+}
+
 @SuppressLint("BatteryLife")
 @Composable
 private fun BatterySection() {
@@ -218,12 +315,12 @@ private fun BatterySection() {
         if (exempt) {
             SettingRow(
                 Icons.Outlined.CheckCircle, "Nessuna restrizione di batteria",
-                "L'app può restare collegata al sensore anche a schermo spento",
+                "L'app può aggiornarsi anche a schermo spento",
                 iconTint = LocalRangeColors.current.inRange,
             )
         } else {
             Text(
-                "Per non perdere letture, consenti all'app di funzionare senza restrizioni di batteria.",
+                "Per non perdere letture a schermo spento, consenti all'app di funzionare senza restrizioni di batteria.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             FilledTonalButton(onClick = {

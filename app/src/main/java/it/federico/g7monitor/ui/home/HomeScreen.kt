@@ -23,6 +23,9 @@ import androidx.compose.material.icons.outlined.BluetoothConnected
 import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Equalizer
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.MonitorHeart
@@ -65,6 +68,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import it.federico.g7monitor.data.Link
 import it.federico.g7monitor.protocol.SensorState
+import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.ui.ChartWindow
 import it.federico.g7monitor.ui.Glucose
 import it.federico.g7monitor.ui.HomeState
@@ -81,14 +85,16 @@ fun HomeScreen(
     onWindow: (ChartWindow) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenServer: () -> Unit,
     onStart: () -> Unit,
 ) {
+    val fromServer = state.settings.dataSource == DataSource.Server
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("G7 Monitor", fontWeight = FontWeight.SemiBold) },
                 actions = {
-                    IconButton(onClick = onOpenDiagnostics) { Icon(Icons.Outlined.MonitorHeart, "Diagnostica") }
+                    if (!fromServer) IconButton(onClick = onOpenDiagnostics) { Icon(Icons.Outlined.MonitorHeart, "Diagnostica") }
                     IconButton(onClick = onOpenSettings) { Icon(Icons.Outlined.Settings, "Impostazioni") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -104,11 +110,17 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             val s = state.settings
-            if (s.pairingCode.isBlank() || !s.collectorEnabled) {
+            if (fromServer) {
+                if (!s.followConnected) ConnectServerCard(onOpenServer)
+            } else if (s.pairingCode.isBlank() || !s.collectorEnabled) {
                 SetupCard(needsCode = s.pairingCode.isBlank(), onOpenSettings = onOpenSettings, onStart = onStart)
             }
             CurrentGlucoseCard(state)
-            SensorCard(state, onOpenDiagnostics)
+            if (fromServer) {
+                if (s.followConnected) ServerCard(state, onOpenServer)
+            } else {
+                SensorCard(state, onOpenDiagnostics)
+            }
             SectionCard("Andamento", Icons.AutoMirrored.Outlined.ShowChart) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     ChartWindow.entries.forEachIndexed { i, w ->
@@ -165,6 +177,69 @@ private fun SetupCard(needsCode: Boolean, onOpenSettings: () -> Unit, onStart: (
             Button(onClick = if (needsCode) onOpenSettings else onStart) {
                 Text(if (needsCode) "Codice" else "Avvia")
             }
+        }
+    }
+}
+
+@Composable
+private fun ConnectServerCard(onOpenServer: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(
+                Icons.Outlined.CloudDownload,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                container = MaterialTheme.colorScheme.primary,
+                size = 44.dp,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Collega il server", style = MaterialTheme.typography.titleMedium)
+                Text("Inserisci l'indirizzo del server G7 Monitor e il tuo account.", style = MaterialTheme.typography.bodyMedium)
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(onClick = onOpenServer) { Text("Collega") }
+        }
+    }
+}
+
+/** Follower mode: where the data comes from and when it was last refreshed. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ServerCard(state: HomeState, onClick: () -> Unit) {
+    val s = state.settings
+    val scheme = MaterialTheme.colorScheme
+    val error = s.followError
+    val color = if (error != null) scheme.error else LocalRangeColors.current.inRange
+    val ago = s.lastFollowAt?.let { (state.now - it) / 60_000L }
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainerLow),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(
+                if (error != null) Icons.Outlined.CloudOff else Icons.Outlined.CloudDone,
+                tint = color, container = color.copy(alpha = 0.14f), size = 32.dp,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    error ?: when {
+                        ago == null -> "Dal server"
+                        ago < 1 -> "Dal server · aggiornato adesso"
+                        else -> "Dal server · aggiornato $ago min fa"
+                    },
+                    style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    "${s.followUrl.removePrefix("https://")} · ${s.followUser}",
+                    style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = "Server", tint = scheme.onSurfaceVariant)
         }
     }
 }
