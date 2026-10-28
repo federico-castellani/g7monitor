@@ -27,6 +27,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -52,7 +55,9 @@ class G7Service : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        _running.value = true
         startMode(readMode())
+        KeepAlive.schedule(this)
 
         lifecycleScope.launch {
             val mmol = app.settings.settings.map { it.useMmol }.distinctUntilChanged()
@@ -100,6 +105,7 @@ class G7Service : LifecycleService() {
                 message = if (mode == DataSource.Sensor) "Servono i permessi Bluetooth: riattiva la raccolta dati" else "Avvio non consentito da Android",
             )
             refused = true
+            _running.value = false
             stopSelf()
             return
         }
@@ -124,13 +130,16 @@ class G7Service : LifecycleService() {
         cancelAlarm(followIntent())
     }
 
-    /** One request per expected reading; the alarm only matters when Doze delays the coroutine timer. */
-    private suspend fun follow() {
+    /**
+     * Live connection to the server (the follower reconnects by itself). Every 10 minutes an alarm,
+     * which also fires in Doze, checks that the link is really alive.
+     */
+    private suspend fun follow() = coroutineScope {
+        launch { app.follower.follow() }
         while (true) {
-            app.follower.sync()
-            val wait = app.follower.nextDelay()
-            setAlarm(followIntent(), wait)
-            withTimeoutOrNull(wait) { followKicks.receive() }
+            setAlarm(followIntent(), LINK_CHECK_MS)
+            withTimeoutOrNull(LINK_CHECK_MS) { followKicks.receive() }
+            app.follower.checkAlive()
         }
     }
 
@@ -146,7 +155,14 @@ class G7Service : LifecycleService() {
         return START_STICKY
     }
 
+    /** Swiped away from recents: some phones kill the process with it, so check again shortly. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        KeepAlive.schedule(this, 5_000L)
+    }
+
     override fun onDestroy() {
+        _running.value = false
         stopMode()
         super.onDestroy()
     }
@@ -188,7 +204,13 @@ class G7Service : LifecycleService() {
     private fun cancelAlarm(intent: PendingIntent) = getSystemService(AlarmManager::class.java).cancel(intent)
 
     companion object {
+        private val _running = MutableStateFlow(false)
+
+        /** True while the service exists in this process (shown in Settings, used by [KeepAlive]). */
+        val running: StateFlow<Boolean> = _running
+
         private const val NOTIFICATION_ID = 7
+        private const val LINK_CHECK_MS = 10 * 60_000L
         private const val ACTION_WATCHDOG = "watchdog"
         private const val ACTION_FOLLOW = "follow"
         private const val ACTION_RESTART = "restart"
@@ -202,11 +224,12 @@ class G7Service : LifecycleService() {
         )
 
         /** "Aggiorna ora" in follower mode. */
-        fun followNow(context: Context) =
-            context.startService(Intent(context, G7Service::class.java).setAction(ACTION_FOLLOW))
 
         /** stopService never creates the service (a "stop" command did, and the new instance then crashed). */
-        fun stop(context: Context) = context.stopService(Intent(context, G7Service::class.java))
+        fun stop(context: Context) {
+            KeepAlive.cancel(context)
+            context.stopService(Intent(context, G7Service::class.java))
+        }
     }
 }
 
@@ -217,7 +240,10 @@ class BootReceiver : BroadcastReceiver() {
         val app = context.applicationContext as G7App
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                if (app.settings.current().collectorEnabled) G7Service.start(context)
+                if (app.settings.current().collectorEnabled) {
+                    runCatching { G7Service.start(context) }
+                    KeepAlive.schedule(context)
+                }
             } finally {
                 pending.finish()
             }

@@ -3,6 +3,7 @@ package it.federico.g7monitor.ui.settings
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
@@ -21,7 +22,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cloud
@@ -32,6 +32,8 @@ import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.PauseCircle
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
@@ -44,6 +46,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
@@ -92,7 +95,7 @@ class SettingsActions(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(settings: AppSettings, actions: SettingsActions, onBack: () -> Unit) {
+fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, actions: SettingsActions, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -112,18 +115,17 @@ fun SettingsScreen(settings: AppSettings, actions: SettingsActions, onBack: () -
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             DataSourceSection(settings, actions)
+            ServiceSection(settings, serviceRunning, actions)
             // Each mode shows only its own settings.
             if (settings.dataSource == DataSource.Server) {
                 ServerLinkSection(settings, actions)
                 AlarmsSection(actions)
                 DisplaySection(settings, actions)
-                BatterySection()
             } else {
                 SensorSection(settings, actions)
                 ServerLinkSection(settings, actions)
                 AlarmsSection(actions)
                 DisplaySection(settings, actions)
-                BatterySection()
                 CertificateSection(settings, actions)
             }
             Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.Top) {
@@ -167,11 +169,6 @@ private fun SensorSection(settings: AppSettings, actions: SettingsActions) {
         if (code != settings.pairingCode) {
             Button(onClick = { actions.onPairingCode(code) }, enabled = valid) { Text("Salva codice") }
         }
-        HorizontalDivider()
-        SettingRow(
-            Icons.Outlined.Bluetooth, "Raccolta dati", "Collegamento Bluetooth in background",
-            trailing = { Switch(checked = settings.collectorEnabled, onCheckedChange = actions.onCollector) },
-        )
         settings.sensorMac?.let { SettingRow(Icons.Outlined.Link, "Sensore abbinato", it) }
         TextButton(
             onClick = { confirmForget = true },
@@ -306,12 +303,41 @@ private fun ServerLinkSection(settings: AppSettings, actions: SettingsActions) {
     }
 }
 
+/**
+ * One button to run the app as a service: started at boot, brought back if Android kills it
+ * (see KeepAlive), with what the phone needs so that it is not stopped in the first place.
+ */
 @SuppressLint("BatteryLife")
 @Composable
-private fun BatterySection() {
+private fun ServiceSection(settings: AppSettings, running: Boolean, actions: SettingsActions) {
     val context = LocalContext.current
     val exempt = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
-    SectionCard("Affidabilità", Icons.Outlined.BatteryChargingFull) {
+    val on = settings.collectorEnabled
+    val ok = LocalRangeColors.current.inRange
+    SectionCard("Servizio in background", Icons.Outlined.PowerSettingsNew) {
+        SettingRow(
+            if (on && running) Icons.Outlined.CheckCircle else Icons.Outlined.PauseCircle,
+            when {
+                on && running -> "Servizio attivo"
+                on -> "Servizio in avvio…"
+                else -> "Servizio fermo"
+            },
+            if (settings.dataSource == DataSource.Server) "Ricezione dal server, allarmi e notifica anche ad app chiusa"
+            else "Collegamento al sensore, allarmi e notifica anche ad app chiusa",
+            iconTint = if (on && running) ok else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "Si avvia da solo all'accensione del telefono e, se Android lo chiude, si riattiva entro 15 minuti. " +
+                "Fermarlo spegne anche gli allarmi: per questo serve lo sblocco del telefono.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (on) {
+            OutlinedButton(onClick = { actions.onCollector(false) }) { Text("Ferma servizio") }
+        } else {
+            Button(onClick = { actions.onCollector(true) }) { Text("Avvia come servizio") }
+        }
+        HorizontalDivider()
         if (exempt) {
             SettingRow(
                 Icons.Outlined.CheckCircle, "Nessuna restrizione di batteria",
@@ -328,6 +354,17 @@ private fun BatterySection() {
                     Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
                 )
             }) { Text("Consenti") }
+        }
+        if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+            Text(
+                "Sui Samsung: Impostazioni → Batteria → Limiti di utilizzo in background → " +
+                    "App mai in sospensione → aggiungi G7 Monitor.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = {
+                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
+            }) { Text("Apri le impostazioni dell'app") }
         }
     }
 }

@@ -72,6 +72,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".ble.KeepAliveReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".ble.BootReceiver"
             android:exported="false">
             <intent-filter>

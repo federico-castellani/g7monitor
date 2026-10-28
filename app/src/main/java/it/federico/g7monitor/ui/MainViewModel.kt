@@ -147,19 +147,19 @@ class MainViewModel : ViewModel() {
     fun refreshFromServer() = viewModelScope.launch {
         val s = app.settings.current()
         if (s.dataSource != DataSource.Server || !s.followConnected) return@launch
-        if (s.collectorEnabled) G7Service.followNow(app) else app.follower.sync()
+        app.follower.sync()
     }
 
     /**
-     * App open in follower mode without the background service: keep refreshing,
-     * timed to the expected readings like the service does. Runs while the screen is visible.
+     * App open in follower mode without the background service: live connection while the screen is visible.
      */
     suspend fun followWhileVisible() {
         refreshFromServer().join()
         while (true) {
-            delay(app.follower.nextDelay())
             val s = app.settings.current()
-            if (s.dataSource == DataSource.Server && s.followConnected && !s.collectorEnabled) app.follower.sync()
+            // With the background service on, the service already holds the live connection.
+            if (s.dataSource == DataSource.Server && s.followConnected && !s.collectorEnabled) app.follower.follow()
+            delay(30_000)
         }
     }
 

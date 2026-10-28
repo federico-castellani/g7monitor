@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             G7Theme {
                 val state by vm.state.collectAsStateWithLifecycle()
+                val serviceRunning by G7Service.running.collectAsStateWithLifecycle()
                 val alarmConfigs by vm.alarmConfigs.collectAsStateWithLifecycle()
                 var alarmType by rememberSaveable { mutableStateOf(AlarmType.UrgentLow) }
                 var screen by rememberSaveable { mutableStateOf(Screen.Home) }
@@ -105,6 +106,13 @@ class MainActivity : ComponentActivity() {
                 }
                 val enableCollector: (Boolean) -> Unit = { on ->
                     when {
+                        // Stopping the service also silences the alarms: same protection as turning one off.
+                        !on && alarmConfigs.values.any { it.enabled } -> DeviceAuth.confirm(
+                            this, "Fermare il servizio?", "Anche gli allarmi smetteranno di funzionare",
+                        ) { ok, error ->
+                            if (ok) vm.setCollector(false)
+                            else if (error != null) Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                        }
                         !on -> vm.setCollector(false)
                         settings.dataSource == DataSource.Server ->
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -164,6 +172,7 @@ class MainActivity : ComponentActivity() {
                 when (screen) {
                     Screen.Settings -> SettingsScreen(
                         settings = settings,
+                        serviceRunning = serviceRunning,
                         actions = SettingsActions(
                             onPairingCode = vm::setPairingCode,
                             onCollector = enableCollector,

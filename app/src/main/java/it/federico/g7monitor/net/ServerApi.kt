@@ -69,6 +69,45 @@ object ServerApi {
         return decode(json.getJSONArray("r"))
     }
 
+    /** The server writes at least every 270 s (ping); no bytes for longer than this means a dead link. */
+    private const val STREAM_READ_TIMEOUT_MS = 330_000
+
+    /**
+     * Follower, live: opens the server's event stream (readings newer than [sinceMs] first, then each
+     * new one as it is uploaded). Blocking. Close the returned connection to stop reading.
+     */
+    fun openStream(base: String, token: String, sinceMs: Long): HttpURLConnection {
+        val conn = URL("$base/api/v1/readings/stream?since=${sinceMs / 1000}").openConnection() as HttpURLConnection
+        conn.connectTimeout = 15_000
+        conn.readTimeout = STREAM_READ_TIMEOUT_MS
+        conn.instanceFollowRedirects = false
+        conn.useCaches = false
+        conn.setRequestProperty("Accept", "text/event-stream")
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        val status = conn.responseCode
+        if (status != 200) {
+            val text = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            conn.disconnect()
+            val err = runCatching { JSONObject(text) }.getOrNull()
+            throw HttpError(status, err?.optString("error"), err?.optString("message")?.takeIf { it.isNotBlank() } ?: "Errore del server ($status)")
+        }
+        return conn
+    }
+
+    /**
+     * Reads the stream until it ends or [conn] is closed (then it throws an IOException).
+     * @param onActivity every line received, pings included (link alive)
+     */
+    suspend fun readStream(conn: HttpURLConnection, onActivity: () -> Unit, onRows: suspend (List<GlucoseReading>) -> Unit) {
+        conn.inputStream.bufferedReader().use { reader ->
+            while (true) {
+                val line = reader.readLine() ?: return
+                onActivity()
+                if (line.startsWith("data:")) onRows(decode(org.json.JSONArray(line.substring(5).trim())))
+            }
+        }
+    }
+
     /** Server rows [unix seconds, mg/dL, trend×10 | null, source] → readings. */
     internal fun decode(rows: org.json.JSONArray): List<GlucoseReading> = List(rows.length()) { i ->
         val row = rows.getJSONArray(i)
