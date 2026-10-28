@@ -92,9 +92,9 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
     private suspend fun loop() {
         while (scope.isActive) {
             val s = app.settings.current()
-            if (!s.pairingCode.matches(Regex("\\d{4}|\\d{6}"))) {
+            if (!s.pairingCode.matches(PAIRING_CODE)) {
                 setLink(Link.Error, "Inserisci il codice di abbinamento del sensore nelle impostazioni")
-                app.settings.settings.first { it.pairingCode.matches(Regex("\\d{4}|\\d{6}")) }
+                app.settings.settings.first { it.pairingCode.matches(PAIRING_CODE) }
                 continue
             }
             if (adapter == null || !adapter.isEnabled) {
@@ -476,5 +476,6 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         const val PERIOD_MS = 5 * 60_000L
         const val SCAN_RESTART_MS = 10 * 60_000L
         const val MAX_BACKFILL_MS = 24 * 60 * 60_000L
+        private val PAIRING_CODE = Regex("\\d{4}|\\d{6}")
     }
 }

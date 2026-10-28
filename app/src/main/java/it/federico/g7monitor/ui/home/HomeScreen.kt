@@ -21,7 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.BluetoothConnected
 import androidx.compose.material.icons.outlined.BluetoothDisabled
-import androidx.compose.material.icons.outlined.BluetoothSearching
+import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Equalizer
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -29,7 +29,7 @@ import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ShowChart
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.TrackChanges
@@ -109,7 +109,7 @@ fun HomeScreen(
             }
             CurrentGlucoseCard(state)
             SensorCard(state, onOpenDiagnostics)
-            SectionCard("Andamento", Icons.Outlined.ShowChart) {
+            SectionCard("Andamento", Icons.AutoMirrored.Outlined.ShowChart) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     ChartWindow.entries.forEachIndexed { i, w ->
                         SegmentedButton(
@@ -223,7 +223,7 @@ private fun CurrentGlucoseCard(state: HomeState) {
                         StatusPill(Icons.Outlined.Schedule, if (it < 1) "adesso" else "$it min fa", MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     state.delta?.let {
-                        StatusPill(Icons.Outlined.ShowChart, "${Glucose.formatDelta(it, s.useMmol)} ${Glucose.unit(s.useMmol)}", MaterialTheme.colorScheme.onSurfaceVariant)
+                        StatusPill(Icons.AutoMirrored.Outlined.ShowChart, "${Glucose.formatDelta(it, s.useMmol)} ${Glucose.unit(s.useMmol)}", MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (trend != null && !state.isStale) {
@@ -259,7 +259,7 @@ private fun TrendArrow(trend: Glucose.Trend, color: Color, size: Dp) {
 
 private fun linkIcon(link: Link): ImageVector = when (link) {
     Link.Off -> Icons.Outlined.BluetoothDisabled
-    Link.Scanning -> Icons.Outlined.BluetoothSearching
+    Link.Scanning -> Icons.AutoMirrored.Outlined.BluetoothSearching
     Link.Error -> Icons.Outlined.ErrorOutline
     Link.Waiting, Link.Receiving -> Icons.Outlined.BluetoothConnected
     else -> Icons.Outlined.Bluetooth

@@ -19,6 +19,8 @@ import it.federico.g7monitor.MainActivity
 import it.federico.g7monitor.R
 import it.federico.g7monitor.ui.Glucose
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -40,16 +42,25 @@ class G7Service : LifecycleService() {
         collector.start()
 
         lifecycleScope.launch {
-            combine(app.status, app.readings.changes, app.settings.settings) { st, _, s -> st to s }
-                .collect { (st, s) ->
-                    val latest = app.readings.latest()
-                    val title = latest?.let {
-                        "${Glucose.format(it.mgdl, s.useMmol)} ${Glucose.unit(s.useMmol)} ${Glucose.arrow(it.trend)}"
-                    } ?: "Nessuna lettura recente"
-                    val text = st.message ?: st.sensorState?.label?.let { "Sensore: $it" } ?: st.link.label
+            val mmol = app.settings.settings.map { it.useMmol }.distinctUntilChanged()
+            var watchdogFor: Long? = null
+            combine(app.status, app.readings.changes, mmol) { st, _, useMmol ->
+                val latest = app.readings.latest()
+                val title = latest?.let {
+                    "${Glucose.format(it.mgdl, useMmol)} ${Glucose.unit(useMmol)} ${Glucose.arrow(it.trend)}"
+                } ?: "Nessuna lettura recente"
+                val text = st.message ?: st.sensorState?.label?.let { "Sensore: $it" } ?: st.link.label
+                Triple(title, text, latest?.timestamp)
+            }
+                // Status changes often during a cycle: only touch the notification when its text changes.
+                .distinctUntilChanged()
+                .collect { (title, text, readingTime) ->
                     getSystemService(NotificationManager::class.java)
-                        .notify(NOTIFICATION_ID, buildNotification(title, text, latest?.timestamp))
-                    if (latest != null) scheduleWatchdog()
+                        .notify(NOTIFICATION_ID, buildNotification(title, text, readingTime))
+                    if (readingTime != null && readingTime != watchdogFor) {
+                        watchdogFor = readingTime
+                        scheduleWatchdog()
+                    }
                 }
         }
     }

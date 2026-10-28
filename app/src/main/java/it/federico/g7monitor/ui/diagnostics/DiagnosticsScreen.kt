@@ -30,8 +30,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.Article
-import androidx.compose.material.icons.outlined.BluetoothSearching
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.MonitorHeart
@@ -133,7 +133,7 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
                 }
             }
             if (status.link == Link.Scanning || scan.active) item {
-                SectionCard("Scansione in corso", Icons.Outlined.BluetoothSearching) {
+                SectionCard("Scansione in corso", Icons.AutoMirrored.Outlined.BluetoothSearching) {
                     val since = scan.startedAt?.let { (now - it) / 1000 } ?: 0
                     InfoLine("Da", "${since / 60} min ${since % 60} s")
                     InfoLine("Risultati col filtro G7", scan.filteredResults.toString())
@@ -170,7 +170,7 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
             }
             item {
                 OutlinedButton(onClick = { showLog = !showLog }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Outlined.Article, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.AutoMirrored.Outlined.Article, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(if (showLog) "Nascondi registro eventi" else "Mostra registro eventi (${entries.size})")
                 }
@@ -178,7 +178,7 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
             if (showLog) {
                 item {
                     SectionCard(
-                        "Registro eventi", Icons.Outlined.Article,
+                        "Registro eventi", Icons.AutoMirrored.Outlined.Article,
                         trailing = {
                             IconButton(onClick = {
                                 context.getSystemService(ClipboardManager::class.java)

@@ -43,10 +43,14 @@ data class HomeState(
     val minutesAgo: Long? get() = latest?.let { (now - it.timestamp) / 60_000L }
     val isStale get() = (minutesAgo ?: Long.MAX_VALUE) >= 15
 
-    val timeInRange: Int?
-        get() = if (readings.isEmpty()) null
+    // Computed once per state rather than on every recomposition.
+    val timeInRange: Int? by lazy(LazyThreadSafetyMode.NONE) {
+        if (readings.isEmpty()) null
         else readings.count { it.mgdl in settings.lowMgdl..settings.highMgdl } * 100 / readings.size
-    val average: Int? get() = if (readings.isEmpty()) null else readings.sumOf { it.mgdl } / readings.size
+    }
+    val average: Int? by lazy(LazyThreadSafetyMode.NONE) {
+        if (readings.isEmpty()) null else readings.sumOf { it.mgdl } / readings.size
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

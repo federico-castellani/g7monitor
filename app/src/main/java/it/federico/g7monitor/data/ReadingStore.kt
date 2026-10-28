@@ -39,31 +39,53 @@ class ReadingStore(context: Context) :
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
 
-    /** @return true when the reading was new. */
-    suspend fun insert(r: GlucoseReading): Boolean = withContext(Dispatchers.IO) {
-        val db = writableDatabase
-        val dup = db.rawQuery(
-            "SELECT 1 FROM readings WHERE ts BETWEEN ? AND ? LIMIT 1",
-            arrayOf((r.timestamp - DEDUPE_MS).toString(), (r.timestamp + DEDUPE_MS).toString()),
-        ).use { it.moveToFirst() }
-        if (dup) return@withContext false
-        db.insert("readings", null, ContentValues().apply {
-            put("ts", r.timestamp)
-            put("mgdl", r.mgdl)
-            if (r.trend != null) put("trend", r.trend) else putNull("trend")
-            put("source", r.source.ordinal)
-        })
-        _changes.value = _changes.value + 1
-        true
+    init {
+        // WAL: the UI can read while the service writes, and commits are cheaper.
+        setWriteAheadLoggingEnabled(true)
     }
 
-    suspend fun insertAll(list: List<GlucoseReading>): Int = list.count { insert(it) }
+    /** @return true when the reading was new. */
+    suspend fun insert(r: GlucoseReading): Boolean = insertAll(listOf(r)) == 1
 
-    suspend fun since(from: Long): List<GlucoseReading> = withContext(Dispatchers.IO) {
-        readableDatabase.rawQuery(
-            "SELECT ts, mgdl, trend, source FROM readings WHERE ts >= ? ORDER BY ts",
-            arrayOf(from.toString()),
-        ).use { c ->
+    /**
+     * Inserts in a single transaction (one disk sync for a whole backfill) and notifies
+     * observers once. @return how many readings were new.
+     */
+    suspend fun insertAll(list: List<GlucoseReading>): Int = withContext(Dispatchers.IO) {
+        if (list.isEmpty()) return@withContext 0
+        val db = writableDatabase
+        var added = 0
+        db.beginTransaction()
+        try {
+            val dupCheck = db.compileStatement("SELECT COUNT(*) FROM readings WHERE ts BETWEEN ? AND ?")
+            val values = ContentValues(4)
+            for (r in list) {
+                dupCheck.bindLong(1, r.timestamp - DEDUPE_MS)
+                dupCheck.bindLong(2, r.timestamp + DEDUPE_MS)
+                if (dupCheck.simpleQueryForLong() > 0) continue
+                values.clear()
+                values.put("ts", r.timestamp)
+                values.put("mgdl", r.mgdl)
+                if (r.trend != null) values.put("trend", r.trend) else values.putNull("trend")
+                values.put("source", r.source.ordinal)
+                if (db.insert("readings", null, values) != -1L) added++
+            }
+            dupCheck.close()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        if (added > 0) _changes.value = _changes.value + 1
+        added
+    }
+
+    suspend fun since(from: Long): List<GlucoseReading> = query("WHERE ts >= ? ORDER BY ts", from)
+
+    suspend fun latest(): GlucoseReading? =
+        query("WHERE ts >= ? ORDER BY ts DESC LIMIT 1", System.currentTimeMillis() - 30 * 60_000L).firstOrNull()
+
+    private suspend fun query(where: String, from: Long): List<GlucoseReading> = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT ts, mgdl, trend, source FROM readings $where", arrayOf(from.toString())).use { c ->
             buildList(c.count) {
                 while (c.moveToNext()) add(
                     GlucoseReading(
@@ -76,8 +98,6 @@ class ReadingStore(context: Context) :
             }
         }
     }
-
-    suspend fun latest(): GlucoseReading? = since(System.currentTimeMillis() - 30 * 60_000L).lastOrNull()
 
     suspend fun prune(olderThan: Long) = withContext(Dispatchers.IO) {
         writableDatabase.delete("readings", "ts < ?", arrayOf(olderThan.toString()))
