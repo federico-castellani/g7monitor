@@ -27,6 +27,8 @@ import java.util.UUID
 class GattClient(
     private val context: Context,
     val device: BluetoothDevice,
+    /** Where characteristics are looked up first (the G7 by default, the Glucose service for a meter). */
+    private val service: UUID = G7Gatt.CGM_SERVICE,
     private val log: (String) -> Unit,
 ) {
     sealed interface Event {
@@ -39,6 +41,7 @@ class GattClient(
     private var gatt: BluetoothGatt? = null
     private val opLock = Mutex()
     @Volatile private var pendingOp: CompletableDeferred<Int>? = null
+    @Volatile private var readValue: ByteArray? = null
     @Volatile private var connected: CompletableDeferred<Boolean>? = null
     @Volatile private var discovered: CompletableDeferred<Boolean>? = null
     @Volatile var isConnected = false
@@ -65,6 +68,21 @@ class GattClient(
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
             pendingOp?.complete(status)
+        }
+
+        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            readValue = value.copyOf()
+            pendingOp?.complete(status)
+        }
+
+        @Deprecated("Used only on Android 12")
+        @Suppress("OVERRIDE_DEPRECATION")
+        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            @Suppress("DEPRECATION")
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                readValue = c.value?.copyOf()
+                pendingOp?.complete(status)
+            }
         }
 
         override fun onDescriptorWrite(g: BluetoothGatt, d: BluetoothGattDescriptor, status: Int) {
@@ -104,8 +122,20 @@ class GattClient(
         return withTimeoutOrNull(15_000) { d.await() } ?: false
     }
 
-    fun characteristic(uuid: UUID): BluetoothGattCharacteristic? =
-        gatt?.getService(G7Gatt.CGM_SERVICE)?.getCharacteristic(uuid)
+    /** In the main service first, then in any other one (e.g. the meter's Current Time service). */
+    fun characteristic(uuid: UUID): BluetoothGattCharacteristic? {
+        val g = gatt ?: return null
+        return g.getService(service)?.getCharacteristic(uuid)
+            ?: g.services.firstNotNullOfOrNull { it.getCharacteristic(uuid) }
+    }
+
+    /** @return the value, or null on failure. */
+    suspend fun read(uuid: UUID): ByteArray? {
+        val g = gatt ?: return null
+        val c = characteristic(uuid) ?: return null
+        readValue = null
+        return if (op { g.readCharacteristic(c) }) readValue else null
+    }
 
     fun requestHighPriority() {
         gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
@@ -123,7 +153,7 @@ class GattClient(
         status == BluetoothGatt.GATT_SUCCESS
     }
 
-    /** Enable notifications (or indications) on a characteristic of the CGM service. */
+    /** Enable notifications (or indications) on a characteristic. */
     suspend fun enable(uuid: UUID, indication: Boolean): Boolean {
         val g = gatt ?: return false
         val c = characteristic(uuid) ?: return false

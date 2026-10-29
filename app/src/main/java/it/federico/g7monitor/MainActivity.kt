@@ -42,6 +42,8 @@ import it.federico.g7monitor.ui.alarm.AlarmsScreen
 import it.federico.g7monitor.ui.ServerPurpose
 import it.federico.g7monitor.ui.diagnostics.DiagnosticsScreen
 import it.federico.g7monitor.ui.home.HomeScreen
+import it.federico.g7monitor.ui.meter.MeterActions
+import it.federico.g7monitor.ui.meter.MeterScreen
 import it.federico.g7monitor.ui.server.ServerAddressScreen
 import it.federico.g7monitor.ui.server.ServerLoginScreen
 import it.federico.g7monitor.ui.server.ServerStatusActions
@@ -52,7 +54,7 @@ import it.federico.g7monitor.ui.settings.SettingsScreen
 import it.federico.g7monitor.ui.theme.G7Theme
 import kotlinx.coroutines.launch
 
-private enum class Screen { Home, Settings, Diagnostics, ServerAddress, ServerLogin, ServerStatus, Alarms, AlarmDetail }
+private enum class Screen { Home, Settings, Diagnostics, ServerAddress, ServerLogin, ServerStatus, Alarms, AlarmDetail, Meter }
 
 class MainActivity : ComponentActivity() {
 
@@ -165,7 +167,7 @@ class MainActivity : ComponentActivity() {
                         Screen.ServerLogin -> Screen.ServerAddress
                         Screen.ServerAddress, Screen.ServerStatus -> serverReturn
                         Screen.AlarmDetail -> Screen.Alarms
-                        Screen.Alarms -> Screen.Settings
+                        Screen.Alarms, Screen.Meter -> Screen.Settings
                         else -> Screen.Home
                     }
                 }
@@ -183,9 +185,31 @@ class MainActivity : ComponentActivity() {
                             onDataSource = { source -> vm.setDataSource(source) },
                             onOpenServer = { openServer(Screen.Settings) },
                             onOpenAlarms = { screen = Screen.Alarms },
+                            onOpenMeter = { screen = Screen.Meter },
                         ),
                         onBack = { screen = Screen.Home },
                     )
+                    Screen.Meter -> {
+                        val meterStatus by G7App.instance.meterStatus.collectAsStateWithLifecycle()
+                        val scanning by vm.meterScanning.collectAsStateWithLifecycle()
+                        val found by vm.meters.collectAsStateWithLifecycle()
+                        val recent by vm.recentFingersticks.collectAsStateWithLifecycle()
+                        MeterScreen(
+                            settings = settings,
+                            status = meterStatus,
+                            serviceRunning = serviceRunning,
+                            scanning = scanning,
+                            found = found,
+                            recent = recent,
+                            actions = MeterActions(
+                                onScan = vm::startMeterScan,
+                                onStopScan = vm::stopMeterScan,
+                                onPair = { meter, onResult -> vm.pairMeter(meter, onResult) },
+                                onForget = { vm.forgetMeter() },
+                            ),
+                            onBack = { vm.stopMeterScan(); screen = Screen.Settings },
+                        )
+                    }
                     Screen.Alarms -> AlarmsScreen(
                         configs = alarmConfigs,
                         mmol = settings.useMmol,

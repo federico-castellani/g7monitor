@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import it.federico.g7monitor.data.Fingerstick
 import it.federico.g7monitor.data.GlucoseReading
 import it.federico.g7monitor.ui.Glucose
 import it.federico.g7monitor.ui.theme.LocalRangeColors
@@ -42,6 +43,8 @@ import kotlin.math.abs
 @Composable
 fun GlucoseChart(
     readings: List<GlucoseReading>,
+    /** Meter results: drawn as outlined diamonds with their value. */
+    fingersticks: List<Fingerstick> = emptyList(),
     windowHours: Int,
     now: Long,
     lowMgdl: Int,
@@ -149,6 +152,21 @@ fun GlucoseChart(
 
         val dotR = if (windowHours <= 6) 3.2.dp.toPx() else 2.4.dp.toPx()
         for (r in visible) drawCircle(colorOf(r.mgdl), dotR, Offset(x(r.timestamp), y(r.mgdl.toFloat())))
+
+        // Meter results: diamond with a light outline, value above
+        val half = 6.dp.toPx()
+        for (f in fingersticks) {
+            if (f.timestamp !in start..end) continue
+            val cx = x(f.timestamp)
+            val cy = y(f.mgdl.toFloat().coerceIn(yMin, yMax))
+            val diamond = Path().apply {
+                moveTo(cx, cy - half); lineTo(cx + half, cy); lineTo(cx, cy + half); lineTo(cx - half, cy); close()
+            }
+            drawPath(diamond, colorOf(f.mgdl))
+            drawPath(diamond, scheme.surface, style = Stroke(width = 1.5.dp.toPx()))
+            val m = measurer.measure(Glucose.format(f.mgdl, mmol), labelStyle)
+            drawText(m, topLeft = Offset(cx - m.size.width / 2, (cy - half - m.size.height - 2.dp.toPx()).coerceAtLeast(0f)))
+        }
 
         // "Now" marker
         val nowX = x(now)

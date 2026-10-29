@@ -22,6 +22,7 @@ import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.data.DebugLog
 import it.federico.g7monitor.data.Link
 import it.federico.g7monitor.data.SensorStatus
+import it.federico.g7monitor.meter.MeterCollector
 import it.federico.g7monitor.ui.Glucose
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -45,6 +46,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class G7Service : LifecycleService() {
 
     private var collector: G7Collector? = null
+    private var meter: MeterCollector? = null
     private var modeScope: CoroutineScope? = null
     private var mode = DataSource.Sensor
     /** Android refused to start this service in the foreground: don't retry until it is started again. */
@@ -114,6 +116,8 @@ class G7Service : LifecycleService() {
         when (mode) {
             DataSource.Sensor -> {
                 collector = G7Collector(this, scope).also { it.start() }
+                // Blood glucose meter, if paired: waits for it in the background.
+                meter = MeterCollector(this, scope).also { it.start() }
                 // Upload right after new readings are stored, while the phone is awake anyway (also catches up at start).
                 scope.launch { app.readings.changes.collect { app.uploader.maybeUpload() } }
             }
@@ -124,6 +128,8 @@ class G7Service : LifecycleService() {
     private fun stopMode() {
         collector?.stop()
         collector = null
+        meter?.stop()
+        meter = null
         modeScope?.cancel()
         modeScope = null
         cancelAlarm(watchdogIntent())

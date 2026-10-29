@@ -13,6 +13,11 @@ App Android moderna per leggere la glicemia direttamente da un **Dexcom G7** via
 - Statistiche: tempo in target, media, numero letture
 - Stato sensore: riscaldamento (30 min), giorno di utilizzo, scadenza (10 giorni + 12 h)
 - Notifica persistente con l'ultima glicemia, riavvio automatico dopo il reboot
+- **Glucometro Bluetooth**, in modalità sensore: lo abbini una volta da *Impostazioni → Glucometro*, con il PIN mostrato dal glucometro. Funziona con i glucometri che usano il profilo standard Bluetooth "Glucose": Contour Next One, Accu-Chek Guide e Instant, OneTouch Verio Flex e Select Plus Flex, CareSens e altri.
+  - Dopo ogni misurazione il telefono riceve il risultato da solo, perché attende il glucometro con una connessione in sospeso che consuma pochissimo.
+  - Scarica solo le misurazioni nuove (numero progressivo), ignora quelle con liquido di controllo e corregge l'orologio del glucometro se è sbagliato.
+  - Le misurazioni compaiono come rombi sul grafico, restano separate da quelle del sensore e non fanno scattare gli allarmi.
+  - Vengono caricate sul server e arrivano in tempo reale al sito e ai telefoni che ricevono.
 - **Allarmi**: molto bassa, bassa, alta, molto alta, discesa rapida, salita rapida, mancanza di segnale.
   - Ognuno ha soglia, durata del posticipo, suono, volume e modalità (suono e vibrazione, solo vibrazione, solo suono) configurabili.
   - Suonano sul canale "sveglia", anche in silenzioso, con una pagina a tutto schermo sopra la schermata di blocco. Se nessuno reagisce risuonano a ogni nuova lettura.
@@ -107,6 +112,7 @@ app/src/main/java/it/federico/g7monitor/
 ├── net/                 # server G7 Monitor: caricamento (Uploader) e ricezione (Follower)
 ├── alarm/               # allarmi: regole (Kotlin puro), motore, suono e vibrazione
 ├── watch/               # invio della glicemia allo smartwatch (Wear OS Data Layer)
+├── meter/               # glucometro Bluetooth: profilo "Glucose" (Kotlin puro) e scarico automatico
 └── ui/                  # Compose: Home, grafico, Impostazioni, server, allarmi, Diagnostica
 
 wear/src/main/java/it/federico/g7monitor/wear/

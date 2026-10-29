@@ -3,6 +3,7 @@ package it.federico.g7monitor.net
 import it.federico.g7monitor.G7App
 import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.data.DebugLog
+import it.federico.g7monitor.data.Fingerstick
 import it.federico.g7monitor.data.GlucoseReading
 import it.federico.g7monitor.data.Link
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +82,7 @@ class Follower(private val app: G7App) {
     }
 
     private suspend fun stream(url: String, token: String, since: Long) = coroutineScope {
-        val conn = withContext(Dispatchers.IO) { ServerApi.openStream(url, token, since) }
+        val conn = withContext(Dispatchers.IO) { ServerApi.openStream(url, token, since, fingerSince()) }
         connection = conn
         // A blocking socket read ignores coroutine cancellation: closing the connection ends it.
         val closer = launch { try { awaitCancellation() } finally { conn.disconnect() } }
@@ -91,7 +92,11 @@ class Follower(private val app: G7App) {
             DebugLog.log("server: collegato in tempo reale")
             showStatus("Dal server · in tempo reale")
             withContext(Dispatchers.IO) {
-                ServerApi.readStream(conn, onActivity = { lastActivity = System.currentTimeMillis() }) { rows -> received(rows) }
+                ServerApi.readStream(
+                    conn,
+                    onActivity = { lastActivity = System.currentTimeMillis() },
+                    onFingersticks = { list -> receivedFingersticks(list) },
+                ) { rows -> received(rows) }
             }
         } finally {
             connection = null
@@ -119,7 +124,9 @@ class Follower(private val app: G7App) {
             val s = app.settings.current()
             if (s.dataSource != DataSource.Server || !s.followConnected) return@withContext false
             try {
-                received(ServerApi.fetchSince(s.followUrl, s.followToken, since()), always = true)
+                val fetched = ServerApi.fetchSince(s.followUrl, s.followToken, since(), fingerSince())
+                receivedFingersticks(fetched.fingersticks)
+                received(fetched.readings, always = true)
                 failures = 0
                 true
             } catch (e: ServerApi.HttpError) {
@@ -153,6 +160,15 @@ class Follower(private val app: G7App) {
     /** From the newest local reading; never more than a day back on the first sync. */
     private suspend fun since(): Long =
         maxOf(app.readings.newestTimestamp() ?: 0L, System.currentTimeMillis() - FIRST_SYNC_MS)
+
+    /** Meter results: from the newest one already here (they are rare and may be older than the last reading). */
+    private suspend fun fingerSince(): Long =
+        maxOf(app.readings.newestFingerstick() ?: 0L, System.currentTimeMillis() - FIRST_SYNC_MS)
+
+    private suspend fun receivedFingersticks(list: List<Fingerstick>) {
+        val added = app.readings.insertFingersticks(list, fromServer = true)
+        if (added > 0) DebugLog.log("server: ricevute $added misurazioni del glucometro")
+    }
 
     private suspend fun received(rows: List<GlucoseReading>, always: Boolean = false) {
         val added = app.readings.insertAll(rows, fromServer = true)

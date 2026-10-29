@@ -51,6 +51,12 @@ data class AppSettings(
     val followToken: String = "",
     val lastFollowAt: Long? = null,
     val followError: String? = null,
+    /** Paired blood glucose meter (sensor mode). */
+    val meterMac: String? = null,
+    val meterName: String? = null,
+    /** Sequence number of the newest record already imported, -1 = none yet. */
+    val meterLastSequence: Int = -1,
+    val meterLastSync: Long? = null,
 ) {
     val hasCertificates get() = certP1.isNotBlank() && certP2.isNotBlank() && certP3.isNotBlank()
     val serverConnected get() = serverUrl.isNotBlank() && serverToken.isNotBlank()
@@ -82,6 +88,10 @@ class SettingsRepository(private val context: Context) {
         val followToken = stringPreferencesKey("follow_token")
         val lastFollow = longPreferencesKey("last_follow_at")
         val followError = stringPreferencesKey("follow_error")
+        val meterMac = stringPreferencesKey("meter_mac")
+        val meterName = stringPreferencesKey("meter_name")
+        val meterSeq = intPreferencesKey("meter_last_seq")
+        val meterSync = longPreferencesKey("meter_last_sync")
         fun key(mac: String) = stringPreferencesKey("key_$mac")
         fun blocked(mac: String) = longPreferencesKey("blocked_$mac")
     }
@@ -116,7 +126,30 @@ class SettingsRepository(private val context: Context) {
         followToken = this[K.followToken] ?: "",
         lastFollowAt = this[K.lastFollow],
         followError = this[K.followError],
+        meterMac = this[K.meterMac],
+        meterName = this[K.meterName],
+        meterLastSequence = this[K.meterSeq] ?: -1,
+        meterLastSync = this[K.meterSync],
     )
+
+    suspend fun setMeter(mac: String, name: String?) = context.dataStore.edit {
+        it[K.meterMac] = mac
+        if (name == null) it.remove(K.meterName) else it[K.meterName] = name
+        it[K.meterSeq] = -1
+        it.remove(K.meterSync)
+    }
+
+    suspend fun forgetMeter() = context.dataStore.edit {
+        it.remove(K.meterMac)
+        it.remove(K.meterName)
+        it.remove(K.meterSeq)
+        it.remove(K.meterSync)
+    }
+
+    suspend fun setMeterSynced(sequence: Int, at: Long) = context.dataStore.edit {
+        it[K.meterSeq] = sequence
+        it[K.meterSync] = at
+    }
 
     suspend fun setDataSource(source: DataSource) = context.dataStore.edit { it[K.source] = source.name }
 

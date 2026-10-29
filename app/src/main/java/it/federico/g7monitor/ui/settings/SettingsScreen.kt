@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -91,6 +92,7 @@ class SettingsActions(
     /** Opens the server pages (setup or status) for the current mode. */
     val onOpenServer: () -> Unit,
     val onOpenAlarms: () -> Unit,
+    val onOpenMeter: () -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -123,6 +125,7 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, actions: Sett
                 DisplaySection(settings, actions)
             } else {
                 SensorSection(settings, actions)
+                MeterSection(settings, actions)
                 ServerLinkSection(settings, actions)
                 AlarmsSection(actions)
                 DisplaySection(settings, actions)
@@ -261,6 +264,25 @@ private fun DataSourceSection(settings: AppSettings, actions: SettingsActions) {
             confirmButton = { TextButton(onClick = { pending = null; actions.onDataSource(source) }) { Text("Cambia") } },
             dismissButton = { TextButton(onClick = { pending = null }) { Text("Annulla") } },
         )
+    }
+}
+
+@Composable
+private fun MeterSection(settings: AppSettings, actions: SettingsActions) {
+    SectionCard("Glucometro", Icons.Outlined.WaterDrop) {
+        if (settings.meterMac != null) {
+            SettingRow(
+                Icons.Outlined.CheckCircle, settings.meterName ?: "Glucometro abbinato",
+                "Le misurazioni arrivano da sole dopo ogni test",
+                iconTint = LocalRangeColors.current.inRange,
+            )
+        } else {
+            Text(
+                "Facoltativo: abbina un glucometro Bluetooth e ogni misurazione arriverà da sola nell'app e sul server.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        FilledTonalButton(onClick = actions.onOpenMeter) { Text(if (settings.meterMac != null) "Gestisci" else "Abbina glucometro") }
     }
 }
 

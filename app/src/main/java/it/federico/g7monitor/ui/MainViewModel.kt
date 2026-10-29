@@ -2,6 +2,9 @@ package it.federico.g7monitor.ui
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,12 +16,15 @@ import it.federico.g7monitor.ble.G7Service
 import it.federico.g7monitor.data.AppSettings
 import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.data.DebugLog
+import it.federico.g7monitor.data.Fingerstick
 import it.federico.g7monitor.data.GlucoseReading
 import it.federico.g7monitor.data.Link
 import it.federico.g7monitor.data.SensorStatus
+import it.federico.g7monitor.meter.GlucoseProfile
 import it.federico.g7monitor.net.ServerApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,6 +40,9 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 
+/** Names of common Bluetooth meters (used when the advertisement does not list the Glucose service). */
+private val METER_NAMES = Regex("contour|accu-?chek|meter|onetouch|verio|caresens|gluco|true ?metrix|beurer|wellion|glucomen", RegexOption.IGNORE_CASE)
+
 enum class ChartWindow(val hours: Int, val label: String) {
     H3(3, "3h"), H6(6, "6h"), H12(12, "12h"), H24(24, "24h")
 }
@@ -46,6 +55,8 @@ data class HomeState(
     val status: SensorStatus = SensorStatus(),
     val window: ChartWindow = ChartWindow.H6,
     val readings: List<GlucoseReading> = emptyList(),
+    /** Blood glucose meter results in the chart window. */
+    val fingersticks: List<Fingerstick> = emptyList(),
     val now: Long = System.currentTimeMillis(),
     /** false until the settings have been read: avoids flashing the welcome screen. */
     val ready: Boolean = false,
@@ -80,10 +91,13 @@ class MainViewModel : ViewModel() {
     private val clock = flow { while (true) { emit(System.currentTimeMillis()); delay(30_000) } }
 
     private val readings = combine(window, app.readings.changes) { w, _ -> w }
-        .mapLatest { w -> app.readings.since(System.currentTimeMillis() - w.hours * 3_600_000L) }
+        .mapLatest { w ->
+            val from = System.currentTimeMillis() - w.hours * 3_600_000L
+            app.readings.since(from) to app.readings.fingersticksSince(from)
+        }
 
     val state: StateFlow<HomeState> = combine(app.settings.settings, app.status, window, readings, clock) { s, st, w, r, now ->
-        HomeState(s, st, w, r, now, ready = true)
+        HomeState(s, st, w, r.first, r.second, now, ready = true)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
 
     init {
@@ -221,8 +235,9 @@ class MainViewModel : ViewModel() {
      */
     private suspend fun restoreFromServer(url: String, token: String) {
         val since = System.currentTimeMillis() - 24 * 3_600_000L
-        val rows = withContext(Dispatchers.IO) { runCatching { ServerApi.fetchSince(url, token, since) }.getOrNull() } ?: return
-        val added = app.readings.insertAll(rows, fromServer = true)
+        val fetched = withContext(Dispatchers.IO) { runCatching { ServerApi.fetchSince(url, token, since, since) }.getOrNull() } ?: return
+        app.readings.insertFingersticks(fetched.fingersticks, fromServer = true)
+        val added = app.readings.insertAll(fetched.readings, fromServer = true)
         if (added > 0) DebugLog.log("server: ripristinate $added letture delle ultime 24 ore")
     }
 
@@ -257,6 +272,92 @@ class MainViewModel : ViewModel() {
     fun setUploadWifiOnly(v: Boolean) = viewModelScope.launch {
         app.settings.setUploadWifiOnly(v)
         if (!v) app.uploader.maybeUpload()
+    }
+
+    // ---------------------------------------------------------------- blood glucose meter
+
+    data class FoundMeter(val address: String, val name: String?, val rssi: Int)
+
+    /** Meter results of the last 7 days, newest first (meter page). */
+    val recentFingersticks: StateFlow<List<Fingerstick>> = app.readings.changes
+        .mapLatest { app.readings.fingersticksSince(System.currentTimeMillis() - 7 * 24 * 3_600_000L).reversed() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _meters = MutableStateFlow<List<FoundMeter>>(emptyList())
+    val meters: StateFlow<List<FoundMeter>> = _meters
+    private val _scanning = MutableStateFlow(false)
+    val meterScanning: StateFlow<Boolean> = _scanning
+    private var scanCallback: ScanCallback? = null
+    private var scanTimer: Job? = null
+
+    /**
+     * Looks for meters in pairing mode for 30 s: devices advertising the standard Glucose service,
+     * plus the usual meter names (some only list the service once connected).
+     * @return an error to show, or null
+     */
+    @SuppressLint("MissingPermission")
+    fun startMeterScan(): String? {
+        stopMeterScan()
+        val scanner = app.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner
+            ?: return "Bluetooth spento"
+        _meters.value = emptyList()
+        val cb = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                val name = result.scanRecord?.deviceName ?: runCatching { result.device.name }.getOrNull()
+                val glucose = result.scanRecord?.serviceUuids?.any { it.uuid == GlucoseProfile.GLUCOSE_SERVICE } == true
+                if (!glucose && (name == null || !METER_NAMES.containsMatchIn(name))) return
+                val found = FoundMeter(result.device.address, name, result.rssi)
+                _meters.value = (_meters.value.filter { it.address != found.address } + found).sortedByDescending { it.rssi }
+            }
+        }
+        val started = runCatching {
+            scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), cb)
+        }
+        if (started.isFailure) return "Servono i permessi Bluetooth: avvia prima il servizio"
+        scanCallback = cb
+        _scanning.value = true
+        scanTimer = viewModelScope.launch {
+            delay(30_000)
+            stopMeterScan()
+        }
+        return null
+    }
+
+    @SuppressLint("MissingPermission")
+    fun stopMeterScan() {
+        scanTimer?.cancel()
+        scanTimer = null
+        scanCallback?.let { cb ->
+            runCatching { app.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner?.stopScan(cb) }
+        }
+        scanCallback = null
+        _scanning.value = false
+    }
+
+    override fun onCleared() {
+        stopMeterScan()
+    }
+
+    /** Android asks for the PIN shown on the meter; then the service downloads the measurements. */
+    fun pairMeter(meter: FoundMeter, onResult: (error: String?) -> Unit) = viewModelScope.launch {
+        stopMeterScan()
+        val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
+            ?: return@launch onResult("Bluetooth spento")
+        val device = adapter.getRemoteDevice(meter.address)
+        val bonded = runCatching { BondHelper.createBond(app, device, 120_000) }.getOrDefault(false)
+        if (!bonded) return@launch onResult("Abbinamento non riuscito: controlla il PIN e che il glucometro sia in modalità abbinamento")
+        app.settings.setMeter(meter.address, meter.name)
+        DebugLog.log("glucometro abbinato: ${meter.name ?: meter.address}")
+        onResult(null)
+    }
+
+    @SuppressLint("MissingPermission")
+    fun forgetMeter() = viewModelScope.launch {
+        val mac = app.settings.current().meterMac
+        if (mac != null) runCatching {
+            BondHelper.removeBond(app.getSystemService(BluetoothManager::class.java).adapter.getRemoteDevice(mac))
+        }
+        app.settings.forgetMeter()
     }
 
     /** Forget the paired sensor: drops the saved key, address and the Android bond. */

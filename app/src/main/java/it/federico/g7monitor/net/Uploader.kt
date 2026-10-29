@@ -33,7 +33,9 @@ class Uploader(private val app: G7App) {
         val s = app.settings.current()
         if (s.dataSource != DataSource.Sensor || !s.serverConnected) return
         val now = System.currentTimeMillis()
-        if (!force) {
+        // A meter result is rare and wanted at once: it skips the upload interval.
+        val urgent = !oldServerLogged && app.readings.pendingFingersticks(1).isNotEmpty()
+        if (!force && !urgent) {
             if (now < retryAt) return
             // 1 minute of tolerance: readings arrive every ~5 minutes, not exactly.
             if (now - (s.lastUploadAt ?: 0L) < s.uploadIntervalMin * 60_000L - 60_000L) return
@@ -53,6 +55,7 @@ class Uploader(private val app: G7App) {
                 sent += batch.size
                 if (batch.size < BATCH) break
             }
+            sent += uploadFingersticks(s.serverUrl, s.serverToken)
             failures = 0
             retryAt = 0
             if (sent > 0 || force || s.uploadError != null) app.settings.setUploadResult(now, null)
@@ -70,6 +73,28 @@ class Uploader(private val app: G7App) {
             failed(now, "Server non raggiungibile")
         }
     }
+
+    /** @return how many were sent (0 with a server too old to know meter results: they wait for its update). */
+    private suspend fun uploadFingersticks(url: String, token: String): Int {
+        var sent = 0
+        while (true) {
+            val batch = app.readings.pendingFingersticks(500)
+            if (batch.isEmpty()) return sent
+            try {
+                ServerApi.uploadFingersticks(url, token, batch)
+            } catch (e: ServerApi.HttpError) {
+                if (e.status != 404) throw e
+                if (!oldServerLogged) DebugLog.log("server: non conosce ancora le misurazioni del glucometro, aggiornalo")
+                oldServerLogged = true
+                return sent
+            }
+            app.readings.markFingersticksUploaded(batch)
+            sent += batch.size
+            if (batch.size < 500) return sent
+        }
+    }
+
+    private var oldServerLogged = false
 
     private suspend fun failed(now: Long, message: String) {
         failures++

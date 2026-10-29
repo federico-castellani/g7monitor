@@ -41,6 +41,9 @@ class G7App : Application() {
     /** Live collector status, written by the BLE service, read by the UI. */
     val status = MutableStateFlow(SensorStatus())
 
+    /** Blood glucose meter link, shown in its settings page. */
+    val meterStatus = MutableStateFlow("Fermo")
+
     /** Work that lives as long as the process (alarm checks). */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 

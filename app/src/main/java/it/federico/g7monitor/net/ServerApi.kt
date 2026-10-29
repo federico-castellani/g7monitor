@@ -1,5 +1,6 @@
 package it.federico.g7monitor.net
 
+import it.federico.g7monitor.data.Fingerstick
 import it.federico.g7monitor.data.GlucoseReading
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -64,9 +65,24 @@ object ServerApi {
      * Follower: readings newer than [sinceMs], oldest first. Asked once per expected reading,
      * so the answer is usually a single row (well under 1 KB with headers).
      */
-    fun fetchSince(base: String, token: String, sinceMs: Long): List<GlucoseReading> {
-        val json = JSONObject(send("GET", "$base/api/v1/readings?since=${sinceMs / 1000}", token, null))
-        return decode(json.getJSONArray("r"))
+    data class Fetched(val readings: List<GlucoseReading>, val fingersticks: List<Fingerstick>)
+
+    /** Readings after [sinceMs] and meter results after [fingerSinceMs] (older servers send no meter results). */
+    fun fetchSince(base: String, token: String, sinceMs: Long, fingerSinceMs: Long): Fetched {
+        val json = JSONObject(send("GET", "$base/api/v1/readings?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}", token, null))
+        return Fetched(decode(json.getJSONArray("r")), json.optJSONArray("f")?.let(::decodeFingersticks) ?: emptyList())
+    }
+
+    /** Meter results: [[unix seconds, mg/dL, meter | null], …]. @return how many the server did not have. */
+    fun uploadFingersticks(base: String, token: String, list: List<Fingerstick>): Int {
+        val rows = org.json.JSONArray()
+        for (f in list) rows.put(org.json.JSONArray().put(f.timestamp / 1000).put(f.mgdl).put(f.meter ?: JSONObject.NULL))
+        return JSONObject(post("$base/api/v1/fingersticks", token, JSONObject().put("f", rows).toString().toByteArray())).optInt("n")
+    }
+
+    internal fun decodeFingersticks(rows: org.json.JSONArray): List<Fingerstick> = List(rows.length()) { i ->
+        val row = rows.getJSONArray(i)
+        Fingerstick(row.getLong(0) * 1000, row.getInt(1), if (row.isNull(2)) null else row.getString(2))
     }
 
     /** The server writes at least every 270 s (ping); no bytes for longer than this means a dead link. */
@@ -76,8 +92,9 @@ object ServerApi {
      * Follower, live: opens the server's event stream (readings newer than [sinceMs] first, then each
      * new one as it is uploaded). Blocking. Close the returned connection to stop reading.
      */
-    fun openStream(base: String, token: String, sinceMs: Long): HttpURLConnection {
-        val conn = URL("$base/api/v1/readings/stream?since=${sinceMs / 1000}").openConnection() as HttpURLConnection
+    fun openStream(base: String, token: String, sinceMs: Long, fingerSinceMs: Long): HttpURLConnection {
+        val url = "$base/api/v1/readings/stream?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}"
+        val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = STREAM_READ_TIMEOUT_MS
         conn.instanceFollowRedirects = false
@@ -98,12 +115,25 @@ object ServerApi {
      * Reads the stream until it ends or [conn] is closed (then it throws an IOException).
      * @param onActivity every line received, pings included (link alive)
      */
-    suspend fun readStream(conn: HttpURLConnection, onActivity: () -> Unit, onRows: suspend (List<GlucoseReading>) -> Unit) {
+    suspend fun readStream(
+        conn: HttpURLConnection,
+        onActivity: () -> Unit,
+        onFingersticks: suspend (List<Fingerstick>) -> Unit,
+        onRows: suspend (List<GlucoseReading>) -> Unit,
+    ) {
         conn.inputStream.bufferedReader().use { reader ->
+            var event = ""
             while (true) {
                 val line = reader.readLine() ?: return
                 onActivity()
-                if (line.startsWith("data:")) onRows(decode(org.json.JSONArray(line.substring(5).trim())))
+                when {
+                    line.isEmpty() -> event = "" // end of an event
+                    line.startsWith("event:") -> event = line.substring(6).trim()
+                    line.startsWith("data:") -> {
+                        val data = org.json.JSONArray(line.substring(5).trim())
+                        if (event == "fingerstick") onFingersticks(decodeFingersticks(data)) else if (event.isEmpty()) onRows(decode(data))
+                    }
+                }
             }
         }
     }

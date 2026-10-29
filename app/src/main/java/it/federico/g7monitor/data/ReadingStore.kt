@@ -19,12 +19,20 @@ data class GlucoseReading(
     enum class Source { Live, Backfill }
 }
 
+/** Blood glucose from a meter (finger stick): kept apart from the sensor's readings. */
+data class Fingerstick(
+    val timestamp: Long,
+    val mgdl: Int,
+    /** Name of the meter, when known. */
+    val meter: String?,
+)
+
 /**
  * Tiny SQLite store for readings. One table, indexed by timestamp: fast and
  * no annotation processing needed. Readings within ±2 minutes are de-duplicated.
  */
 class ReadingStore(context: Context) :
-    SQLiteOpenHelper(context, "readings.db", null, 2) {
+    SQLiteOpenHelper(context, "readings.db", null, 3) {
 
     private val _changes = MutableStateFlow(0L)
 
@@ -37,6 +45,15 @@ class ReadingStore(context: Context) :
                 "uploaded INTEGER NOT NULL DEFAULT 0)"
         )
         db.execSQL(PENDING_INDEX)
+        createFingersticks(db)
+    }
+
+    private fun createFingersticks(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE fingersticks (id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, mgdl INTEGER NOT NULL, meter TEXT, " +
+                "uploaded INTEGER NOT NULL DEFAULT 0)"
+        )
+        db.execSQL("CREATE INDEX fingersticks_ts ON fingersticks(ts)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -45,6 +62,7 @@ class ReadingStore(context: Context) :
             db.execSQL("ALTER TABLE readings ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0")
             db.execSQL(PENDING_INDEX)
         }
+        if (oldVersion < 3) createFingersticks(db)
     }
 
     init {
@@ -123,6 +141,7 @@ class ReadingStore(context: Context) :
     /** New server or account: everything stored locally is sent again (the server ignores duplicates). */
     suspend fun markAllPending() = withContext(Dispatchers.IO) {
         writableDatabase.execSQL("UPDATE readings SET uploaded = 0 WHERE uploaded != 0")
+        writableDatabase.execSQL("UPDATE fingersticks SET uploaded = 0 WHERE uploaded != 0")
     }
 
     private suspend fun query(where: String, arg: Long): List<GlucoseReading> = withContext(Dispatchers.IO) {
@@ -142,10 +161,83 @@ class ReadingStore(context: Context) :
 
     suspend fun prune(olderThan: Long) = withContext(Dispatchers.IO) {
         writableDatabase.delete("readings", "ts < ?", arrayOf(olderThan.toString()))
+        writableDatabase.delete("fingersticks", "ts < ?", arrayOf(olderThan.toString()))
+    }
+
+    // ---------------------------------------------------------------- meter (finger sticks)
+
+    /**
+     * The same measurement can arrive twice (meter re-sync, server echo): same value within
+     * a minute counts as one. A genuine re-test usually gives a different value and is kept.
+     * @return how many were new
+     */
+    suspend fun insertFingersticks(list: List<Fingerstick>, fromServer: Boolean = false): Int = withContext(Dispatchers.IO) {
+        if (list.isEmpty()) return@withContext 0
+        val db = writableDatabase
+        var added = 0
+        db.beginTransaction()
+        try {
+            val dup = db.compileStatement("SELECT COUNT(*) FROM fingersticks WHERE ts BETWEEN ? AND ? AND mgdl = ?")
+            val values = ContentValues(4)
+            for (f in list) {
+                dup.bindLong(1, f.timestamp - FINGERSTICK_DEDUPE_MS)
+                dup.bindLong(2, f.timestamp + FINGERSTICK_DEDUPE_MS)
+                dup.bindLong(3, f.mgdl.toLong())
+                if (dup.simpleQueryForLong() > 0) continue
+                values.clear()
+                values.put("ts", f.timestamp)
+                values.put("mgdl", f.mgdl)
+                if (f.meter != null) values.put("meter", f.meter) else values.putNull("meter")
+                values.put("uploaded", if (fromServer) 1 else 0)
+                if (db.insert("fingersticks", null, values) != -1L) added++
+            }
+            dup.close()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        if (added > 0) _changes.value = _changes.value + 1
+        added
+    }
+
+    suspend fun fingersticksSince(from: Long): List<Fingerstick> = fingersticks("WHERE ts >= ? ORDER BY ts", from)
+
+    suspend fun pendingFingersticks(limit: Int): List<Fingerstick> = fingersticks("WHERE uploaded = 0 ORDER BY ts LIMIT ?", limit.toLong())
+
+    suspend fun newestFingerstick(): Long? = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT MAX(ts) FROM fingersticks", null).use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
+    }
+
+    suspend fun markFingersticksUploaded(list: List<Fingerstick>) = withContext(Dispatchers.IO) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val update = db.compileStatement("UPDATE fingersticks SET uploaded = 1 WHERE ts = ? AND mgdl = ?")
+            for (f in list) {
+                update.bindLong(1, f.timestamp)
+                update.bindLong(2, f.mgdl.toLong())
+                update.executeUpdateDelete()
+            }
+            update.close()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private suspend fun fingersticks(where: String, arg: Long): List<Fingerstick> = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery("SELECT ts, mgdl, meter FROM fingersticks $where", arrayOf(arg.toString())).use { c ->
+            buildList(c.count) {
+                while (c.moveToNext()) add(Fingerstick(c.getLong(0), c.getInt(1), if (c.isNull(2)) null else c.getString(2)))
+            }
+        }
     }
 
     companion object {
         private const val DEDUPE_MS = 2 * 60_000L
+        private const val FINGERSTICK_DEDUPE_MS = 60_000L
         private const val PENDING_INDEX = "CREATE INDEX readings_pending ON readings(ts) WHERE uploaded = 0"
     }
 }

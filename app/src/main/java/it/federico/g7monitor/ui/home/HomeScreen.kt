@@ -36,6 +36,10 @@ import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.TrackChanges
+import androidx.compose.material.icons.outlined.WaterDrop
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -53,6 +57,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -134,12 +139,25 @@ fun HomeScreen(
                 }
                 GlucoseChart(
                     readings = state.readings,
+                    fingersticks = state.fingersticks,
                     windowHours = state.window.hours,
                     now = state.now,
                     lowMgdl = s.lowMgdl,
                     highMgdl = s.highMgdl,
                     mmol = s.useMmol,
                 )
+                state.fingersticks.lastOrNull()?.let { f ->
+                    val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(f.timestamp)) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.WaterDrop, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Glucometro: ${Glucose.format(f.mgdl, s.useMmol)} ${Glucose.unit(s.useMmol)} alle $time",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(Icons.Outlined.TrackChanges, "In target", state.timeInRange?.let { "$it%" } ?: "—", Modifier.weight(1f))
