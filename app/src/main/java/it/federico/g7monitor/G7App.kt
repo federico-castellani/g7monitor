@@ -11,7 +11,9 @@ import it.federico.g7monitor.data.SensorStatus
 import it.federico.g7monitor.data.SettingsRepository
 import it.federico.g7monitor.net.Follower
 import it.federico.g7monitor.net.Uploader
+import it.federico.g7monitor.update.AppUpdater
 import it.federico.g7monitor.watch.WatchSync
+import it.federico.g7monitor.widget.GlucoseWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,6 +39,8 @@ class G7App : Application() {
         private set
     lateinit var watch: WatchSync
         private set
+    lateinit var updater: AppUpdater
+        private set
 
     /** Live collector status, written by the BLE service, read by the UI. */
     val status = MutableStateFlow(SensorStatus())
@@ -57,6 +61,7 @@ class G7App : Application() {
         alarmSettings = AlarmRepository(this)
         alarms = AlarmEngine(this)
         watch = WatchSync(this)
+        updater = AppUpdater(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_STATUS, "Glicemia in corso", NotificationManager.IMPORTANCE_LOW).apply {
@@ -78,6 +83,8 @@ class G7App : Application() {
         // ...and sent to the watch complications (again when unit or target range change).
         val display = settings.settings.map { Triple(it.useMmol, it.lowMgdl, it.highMgdl) }.distinctUntilChanged()
         scope.launch { combine(readings.changes, display) { _, _ -> }.collect { watch.push() } }
+        // ...and drawn on the home screen widgets.
+        scope.launch { combine(readings.changes, display) { _, _ -> }.collect { GlucoseWidget.update(this@G7App) } }
     }
 
     companion object {

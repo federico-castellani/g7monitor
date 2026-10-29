@@ -62,21 +62,18 @@ class G7Service : LifecycleService() {
         KeepAlive.schedule(this)
 
         lifecycleScope.launch {
-            val mmol = app.settings.settings.map { it.useMmol }.distinctUntilChanged()
+            val display = app.settings.settings.map { Triple(it.useMmol, it.lowMgdl, it.highMgdl) }.distinctUntilChanged()
             var watchdogFor: Long? = null
-            combine(app.status, app.readings.changes, mmol) { st, _, useMmol ->
-                val latest = app.readings.latest()
-                val title = latest?.let {
-                    "${Glucose.format(it.mgdl, useMmol)} ${Glucose.unit(useMmol)} ${Glucose.arrow(it.trend)}"
-                } ?: "Nessuna lettura recente"
+            combine(app.status, app.readings.changes, display) { st, _, (mmol, low, high) ->
                 val text = st.message ?: st.sensorState?.label?.let { "Sensore: $it" } ?: st.link.label
-                Triple(title, text, latest?.timestamp)
+                text to GlucoseNotification.load(app, text, mmol, low, high, maxAgeMs = 30 * 60_000L)
             }
-                // Status changes often during a cycle: only touch the notification when its text changes.
+                // Status changes often during a cycle: only touch the notification when what it shows changes.
                 .distinctUntilChanged()
-                .collect { (title, text, readingTime) ->
-                    getSystemService(NotificationManager::class.java)
-                        .notify(NOTIFICATION_ID, buildNotification(title, text, readingTime))
+                .collect { (text, data) ->
+                    val n = if (data != null) buildGlucoseNotification(data) else buildNotification("Nessuna lettura recente", text)
+                    getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
+                    val readingTime = data?.latest?.timestamp
                     if (mode == DataSource.Sensor && readingTime != null && readingTime != watchdogFor) {
                         watchdogFor = readingTime
                         scheduleWatchdog()
@@ -173,10 +170,30 @@ class G7Service : LifecycleService() {
         super.onDestroy()
     }
 
+    private fun openApp() = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+
+    /** Value coloured by range, trend and chart (collapsed: sparkline; expanded: 3-hour chart). */
+    private fun buildGlucoseNotification(d: GlucoseNotificationData): Notification =
+        NotificationCompat.Builder(this, G7App.CHANNEL_STATUS)
+            .setSmallIcon(R.drawable.ic_notification)
+            // plain text too: shown where custom layouts are not (some lock screens, watches)
+            .setContentTitle("${Glucose.format(d.latest.mgdl, d.mmol)} ${Glucose.unit(d.mmol)} ${Glucose.arrow(d.latest.trend)}")
+            .setContentText(d.status)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomContentView(GlucoseNotification.views(this, d, expanded = false))
+            .setCustomBigContentView(GlucoseNotification.views(this, d, expanded = true))
+            .setGroup(GROUP_STATUS)
+            .setContentIntent(openApp())
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setWhen(d.latest.timestamp)
+            .setShowWhen(true)
+            .build()
+
     private fun buildNotification(title: String, text: String?, `when`: Long? = null): Notification {
-        val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
-        )
+        val open = openApp()
         return NotificationCompat.Builder(this, G7App.CHANNEL_STATUS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
@@ -184,6 +201,7 @@ class G7Service : LifecycleService() {
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setGroup(GROUP_STATUS)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .apply { if (`when` != null) setWhen(`when`).setShowWhen(true) }
@@ -216,6 +234,8 @@ class G7Service : LifecycleService() {
         val running: StateFlow<Boolean> = _running
 
         private const val NOTIFICATION_ID = 7
+        /** Own group: the system must not bundle it with the alarm notification. */
+        private const val GROUP_STATUS = "it.federico.g7monitor.STATUS"
         private const val LINK_CHECK_MS = 10 * 60_000L
         private const val ACTION_WATCHDOG = "watchdog"
         private const val ACTION_FOLLOW = "follow"

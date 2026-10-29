@@ -31,16 +31,22 @@ import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Sensors
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.TrackChanges
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.NotificationsOff
+import it.federico.g7monitor.ui.alarm.pausedText
+import it.federico.g7monitor.ui.update.UpdateActions
+import it.federico.g7monitor.ui.update.UpdateCard
+import it.federico.g7monitor.update.UpdateState
 import androidx.compose.material.icons.outlined.WaterDrop
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +79,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import it.federico.g7monitor.data.Link
 import it.federico.g7monitor.protocol.SensorState
+import it.federico.g7monitor.alarm.ActiveAlarm
+import it.federico.g7monitor.alarm.AlarmType
 import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.ui.ChartWindow
 import it.federico.g7monitor.ui.Glucose
@@ -88,10 +96,20 @@ import it.federico.g7monitor.ui.theme.LocalRangeColors
 fun HomeScreen(
     state: HomeState,
     onWindow: (ChartWindow) -> Unit,
-    onOpenSettings: () -> Unit,
+    /** Sensor settings (pairing code), from the setup card. */
+    onOpenSensorSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenServer: () -> Unit,
     onStart: () -> Unit,
+    /** Alarm ringing now, if any: shown on top with a "Posticipa" button. */
+    activeAlarm: ActiveAlarm? = null,
+    onSnoozeAlarm: (AlarmType) -> Unit = {},
+    /** All alarms paused until this time: a reminder with "Riattiva" stays on top. */
+    alarmsPausedUntil: Long? = null,
+    onResumeAlarms: () -> Unit = {},
+    /** New app version: card with "Aggiorna" while there is one. */
+    update: UpdateState = UpdateState.Idle,
+    updateActions: UpdateActions? = null,
 ) {
     val fromServer = state.settings.dataSource == DataSource.Server
     Scaffold(
@@ -100,7 +118,6 @@ fun HomeScreen(
                 title = { Text("G7 Monitor", fontWeight = FontWeight.SemiBold) },
                 actions = {
                     if (!fromServer) IconButton(onClick = onOpenDiagnostics) { Icon(Icons.Outlined.MonitorHeart, "Diagnostica") }
-                    IconButton(onClick = onOpenSettings) { Icon(Icons.Outlined.Settings, "Impostazioni") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
@@ -115,10 +132,13 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             val s = state.settings
+            activeAlarm?.let { ActiveAlarmCard(it, onSnoozeAlarm) }
+            alarmsPausedUntil?.takeIf { it > state.now }?.let { PausedAlarmsCard(it, onResumeAlarms) }
+            updateActions?.let { UpdateCard(update, it) }
             if (fromServer) {
                 if (!s.followConnected) ConnectServerCard(onOpenServer)
             } else if (s.pairingCode.isBlank() || !s.collectorEnabled) {
-                SetupCard(needsCode = s.pairingCode.isBlank(), onOpenSettings = onOpenSettings, onStart = onStart)
+                SetupCard(needsCode = s.pairingCode.isBlank(), onOpenSettings = onOpenSensorSettings, onStart = onStart)
             }
             CurrentGlucoseCard(state)
             if (fromServer) {
@@ -195,6 +215,59 @@ private fun SetupCard(needsCode: Boolean, onOpenSettings: () -> Unit, onStart: (
             Button(onClick = if (needsCode) onOpenSettings else onStart) {
                 Text(if (needsCode) "Codice" else "Avvia")
             }
+        }
+    }
+}
+
+@Composable
+private fun ActiveAlarmCard(alarm: ActiveAlarm, onSnooze: (AlarmType) -> Unit) {
+    val color = MaterialTheme.colorScheme.error
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Outlined.NotificationsActive, tint = MaterialTheme.colorScheme.onError, container = color, size = 44.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(alarm.type.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                if (alarm.text.isNotBlank()) {
+                    Text(alarm.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = { onSnooze(alarm.type) },
+                colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = MaterialTheme.colorScheme.onError),
+            ) { Text("Posticipa ${alarm.snoozeMin}'") }
+        }
+    }
+}
+
+@Composable
+private fun PausedAlarmsCard(until: Long, onResume: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(
+                Icons.Outlined.NotificationsOff, tint = MaterialTheme.colorScheme.onError,
+                container = MaterialTheme.colorScheme.error, size = 44.dp,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Allarmi sospesi", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(
+                    pausedText(until).removePrefix("Sospesi ").replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onResume,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+            ) { Text("Riattiva") }
         }
     }
 }

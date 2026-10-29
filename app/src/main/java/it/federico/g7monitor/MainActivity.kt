@@ -17,7 +17,22 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,11 +65,27 @@ import it.federico.g7monitor.ui.server.ServerStatusActions
 import it.federico.g7monitor.ui.server.ServerStatusScreen
 import it.federico.g7monitor.ui.server.WelcomeScreen
 import it.federico.g7monitor.ui.settings.SettingsActions
+import it.federico.g7monitor.ui.settings.SettingsPage
+import it.federico.g7monitor.ui.settings.SettingsPageScreen
 import it.federico.g7monitor.ui.settings.SettingsScreen
+import it.federico.g7monitor.ui.settings.UpdateInfo
+import it.federico.g7monitor.ui.update.UpdateActions
 import it.federico.g7monitor.ui.theme.G7Theme
 import kotlinx.coroutines.launch
 
-private enum class Screen { Home, Settings, Diagnostics, ServerAddress, ServerLogin, ServerStatus, Alarms, AlarmDetail, Meter }
+private enum class Screen(val page: SettingsPage? = null) {
+    Home, Alarms, Settings,
+    SettingsSensor(SettingsPage.Sensor), SettingsService(SettingsPage.Service),
+    SettingsDisplay(SettingsPage.Display), SettingsSource(SettingsPage.Source), SettingsUpdates(SettingsPage.Updates),
+    Diagnostics, ServerAddress, ServerLogin, ServerStatus, AlarmDetail, Meter;
+
+    companion object {
+        fun of(page: SettingsPage) = entries.first { it.page == page }
+    }
+}
+
+/** Bottom bar destinations: everything else opens on top of them, with a back arrow. */
+private val TABS = listOf(Screen.Home, Screen.Alarms, Screen.Settings)
 
 class MainActivity : ComponentActivity() {
 
@@ -69,6 +100,25 @@ class MainActivity : ComponentActivity() {
     private fun hasBluetoothPermissions() = listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         .all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
 
+    private fun settingsActions(onCollector: (Boolean) -> Unit, openServer: () -> Unit, open: (Screen) -> Unit) = SettingsActions(
+        onPairingCode = vm::setPairingCode,
+        onCollector = onCollector,
+        onMmol = vm::setUseMmol,
+        onRange = vm::setRange,
+        onCertificates = vm::setCertificates,
+        onForget = vm::forgetSensor,
+        onDataSource = vm::setDataSource,
+        onOpenServer = openServer,
+        onOpenMeter = { open(Screen.Meter) },
+        onOpenDiagnostics = { open(Screen.Diagnostics) },
+        onOpenPage = { page -> open(Screen.of(page)) },
+        update = updateActions,
+    )
+
+    private val updateActions by lazy {
+        UpdateActions(onCheck = { vm.checkForUpdates(true) }, onInstall = { vm.installUpdate(it) }, onReset = vm::resetUpdate)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -81,15 +131,30 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) { vm.followWhileVisible() }
         }
+        // New app version on GitHub: checked when the app is opened, at most every few hours.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) { vm.checkForUpdates(force = false) }
+        }
         setContent {
             G7Theme {
                 val state by vm.state.collectAsStateWithLifecycle()
                 val serviceRunning by G7Service.running.collectAsStateWithLifecycle()
+                val activeAlarm by G7App.instance.alarms.active.collectAsStateWithLifecycle()
                 val alarmConfigs by vm.alarmConfigs.collectAsStateWithLifecycle()
+                val alarmsPausedUntil by vm.alarmsPausedUntil.collectAsStateWithLifecycle()
+                val updateState by vm.updateState.collectAsStateWithLifecycle()
+                val update = UpdateInfo(updateState, vm.installedVersion)
                 var alarmType by rememberSaveable { mutableStateOf(AlarmType.UrgentLow) }
-                var screen by rememberSaveable { mutableStateOf(Screen.Home) }
-                /** Where the server pages return to (Home or Settings). */
-                var serverReturn by rememberSaveable { mutableStateOf(Screen.Settings) }
+                /** Pages opened, the current one last: Back returns to the previous one. */
+                var stack by rememberSaveable { mutableStateOf(listOf(Screen.Home)) }
+                val screen = stack.last()
+                val open: (Screen) -> Unit = { stack = stack + it }
+                val back: () -> Unit = {
+                    if (screen == Screen.Meter) vm.stopMeterScan()
+                    if (stack.size > 1) stack = stack.dropLast(1)
+                }
+                /** A tab starts a fresh path; Back from Allarmi or Impostazioni goes to the glucose. */
+                val selectTab: (Screen) -> Unit = { tab -> stack = if (tab == Screen.Home) listOf(Screen.Home) else listOf(Screen.Home, tab) }
                 /** Address confirmed in step 1, used by step 2. */
                 var pendingUrl by rememberSaveable { mutableStateOf("") }
                 val settings = state.settings
@@ -124,6 +189,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 /** Turning an alarm on is free; turning it off needs the phone's screen lock or biometrics. */
+                /** Pausing all alarms needs the screen lock, like turning one off; resuming is free. */
+                val pauseAlarms: (Long?) -> Unit = { until ->
+                    if (until == null) vm.pauseAlarms(null)
+                    else DeviceAuth.confirm(this, "Sospendere tutti gli allarmi?", "Conferma con lo sblocco del telefono") { ok, error ->
+                        if (ok) vm.pauseAlarms(until)
+                        else if (error != null) Toast.makeText(this, error, Toast.LENGTH_LONG).show()
+                    }
+                }
                 val toggleAlarm: (AlarmConfig, Boolean) -> Unit = { config, on ->
                     if (on) {
                         vm.saveAlarm(config.copy(enabled = true))
@@ -140,10 +213,7 @@ class MainActivity : ComponentActivity() {
                     val uri = result.data?.let { IntentCompat.getParcelableExtra(it, RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java) }
                     if (uri != null) vm.saveAlarm(alarmConfigs.getValue(alarmType).copy(sound = uri.toString()))
                 }
-                val openServer: (from: Screen) -> Unit = { from ->
-                    serverReturn = from
-                    screen = if (linked) Screen.ServerStatus else Screen.ServerAddress
-                }
+                val openServer: () -> Unit = { open(if (linked) Screen.ServerStatus else Screen.ServerAddress) }
 
                 if (!state.ready) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
@@ -152,154 +222,177 @@ class MainActivity : ComponentActivity() {
                 if (settings.dataSource == null) {
                     WelcomeScreen(onChoose = { source ->
                         vm.setDataSource(source)
-                        if (source == DataSource.Server) {
-                            serverReturn = Screen.Home
-                            screen = Screen.ServerAddress
-                        } else {
-                            screen = Screen.Home
-                        }
+                        stack = if (source == DataSource.Server) listOf(Screen.Home, Screen.ServerAddress) else listOf(Screen.Home)
                     })
                     return@G7Theme
                 }
 
-                BackHandler(enabled = screen != Screen.Home) {
-                    screen = when (screen) {
-                        Screen.ServerLogin -> Screen.ServerAddress
-                        Screen.ServerAddress, Screen.ServerStatus -> serverReturn
-                        Screen.AlarmDetail -> Screen.Alarms
-                        Screen.Alarms, Screen.Meter -> Screen.Settings
-                        else -> Screen.Home
-                    }
-                }
-                when (screen) {
-                    Screen.Settings -> SettingsScreen(
-                        settings = settings,
-                        serviceRunning = serviceRunning,
-                        actions = SettingsActions(
-                            onPairingCode = vm::setPairingCode,
-                            onCollector = enableCollector,
-                            onMmol = vm::setUseMmol,
-                            onRange = vm::setRange,
-                            onCertificates = vm::setCertificates,
-                            onForget = vm::forgetSensor,
-                            onDataSource = { source -> vm.setDataSource(source) },
-                            onOpenServer = { openServer(Screen.Settings) },
-                            onOpenAlarms = { screen = Screen.Alarms },
-                            onOpenMeter = { screen = Screen.Meter },
-                        ),
-                        onBack = { screen = Screen.Home },
-                    )
-                    Screen.Meter -> {
-                        val meterStatus by G7App.instance.meterStatus.collectAsStateWithLifecycle()
-                        val scanning by vm.meterScanning.collectAsStateWithLifecycle()
-                        val found by vm.meters.collectAsStateWithLifecycle()
-                        val recent by vm.recentFingersticks.collectAsStateWithLifecycle()
-                        MeterScreen(
-                            settings = settings,
-                            status = meterStatus,
-                            serviceRunning = serviceRunning,
-                            scanning = scanning,
-                            found = found,
-                            recent = recent,
-                            actions = MeterActions(
-                                onScan = vm::startMeterScan,
-                                onStopScan = vm::stopMeterScan,
-                                onPair = { meter, onResult -> vm.pairMeter(meter, onResult) },
-                                onForget = { vm.forgetMeter() },
-                            ),
-                            onBack = { vm.stopMeterScan(); screen = Screen.Settings },
-                        )
-                    }
-                    Screen.Alarms -> AlarmsScreen(
-                        configs = alarmConfigs,
-                        mmol = settings.useMmol,
-                        receiving = settings.collectorEnabled,
-                        onOpen = { type -> alarmType = type; screen = Screen.AlarmDetail },
-                        onToggle = { type, on -> toggleAlarm(alarmConfigs.getValue(type), on) },
-                        onBack = { screen = Screen.Settings },
-                    )
-                    Screen.AlarmDetail -> {
-                        val config = alarmConfigs.getValue(alarmType)
-                        AlarmDetailScreen(
-                            config = config,
-                            mmol = settings.useMmol,
-                            actions = AlarmDetailActions(
-                                onChange = vm::saveAlarm,
-                                onToggle = { on -> toggleAlarm(config, on) },
-                                onPreview = vm::previewAlarm,
-                                onStopPreview = vm::stopAlarmPreview,
-                                onPickSystemSound = {
-                                    soundPicker.launch(
-                                        Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
-                                            .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_RINGTONE)
-                                            .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Suono per \"${config.type.title}\"")
-                                            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
-                                            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
-                                            .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, if (config.builtInSound == null) Uri.parse(config.sound) else null),
-                                    )
+                BackHandler(enabled = stack.size > 1, onBack = back)
+                val tab = screen.takeIf { it in TABS }
+                Scaffold(
+                    bottomBar = {
+                        if (tab != null) NavigationBar {
+                            NavigationBarItem(
+                                selected = tab == Screen.Home, onClick = { selectTab(Screen.Home) },
+                                icon = { Icon(Icons.AutoMirrored.Outlined.ShowChart, contentDescription = null) },
+                                label = { Text("Glicemia") },
+                            )
+                            NavigationBarItem(
+                                selected = tab == Screen.Alarms, onClick = { selectTab(Screen.Alarms) },
+                                icon = {
+                                    BadgedBox(badge = { if (activeAlarm != null) Badge() }) {
+                                        Icon(
+                                            if (alarmsPausedUntil != null) Icons.Outlined.NotificationsOff else Icons.Outlined.NotificationsActive,
+                                            contentDescription = null,
+                                        )
+                                    }
                                 },
-                            ),
-                            onBack = { screen = Screen.Alarms },
-                        )
-                    }
-                    Screen.Diagnostics -> DiagnosticsScreen(
-                        settings = settings,
-                        status = state.status,
-                        onBack = { screen = Screen.Home },
-                    )
-                    Screen.ServerAddress -> ServerAddressScreen(
-                        purpose = purpose,
-                        initialUrl = (if (purpose == ServerPurpose.Follow) settings.followUrl else settings.serverUrl).removePrefix("https://"),
-                        onCheck = vm::checkServer,
-                        onFound = { url ->
-                            pendingUrl = url
-                            screen = Screen.ServerLogin
-                        },
-                        onBack = { screen = serverReturn },
-                    )
-                    Screen.ServerLogin -> ServerLoginScreen(
-                        purpose = purpose,
-                        url = pendingUrl,
-                        initialUser = if (purpose == ServerPurpose.Follow) settings.followUser else settings.serverUser,
-                        onLogin = { user, password, totp, onResult ->
-                            vm.connectServer(purpose, pendingUrl, user, password, totp, onResult)
-                        },
-                        onDone = {
-                            if (purpose == ServerPurpose.Follow) {
-                                // The background service starts on its own: ask once to show its notification.
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                                    ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                                ) notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                screen = Screen.Home
-                            } else {
-                                screen = Screen.ServerStatus
+                                label = { Text("Allarmi") },
+                            )
+                            NavigationBarItem(
+                                selected = tab == Screen.Settings, onClick = { selectTab(Screen.Settings) },
+                                icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                                label = { Text("Impostazioni") },
+                            )
+                        }
+                    },
+                    // Each page handles the system bars itself; here only the bottom bar's height.
+                    contentWindowInsets = WindowInsets(0),
+                ) { bars ->
+                    Box(Modifier.fillMaxSize().padding(bars).consumeWindowInsets(bars)) {
+                        when (screen) {
+                            Screen.Settings -> SettingsScreen(settings, serviceRunning, update, settingsActions(enableCollector, openServer, open))
+                            Screen.SettingsSensor, Screen.SettingsService, Screen.SettingsDisplay, Screen.SettingsSource, Screen.SettingsUpdates -> SettingsPageScreen(
+                                page = screen.page!!,
+                                settings = settings,
+                                serviceRunning = serviceRunning,
+                                update = update,
+                                actions = settingsActions(enableCollector, openServer, open),
+                                onBack = back,
+                            )
+                            Screen.Meter -> {
+                                val meterStatus by G7App.instance.meterStatus.collectAsStateWithLifecycle()
+                                val scanning by vm.meterScanning.collectAsStateWithLifecycle()
+                                val found by vm.meters.collectAsStateWithLifecycle()
+                                val recent by vm.recentFingersticks.collectAsStateWithLifecycle()
+                                MeterScreen(
+                                    settings = settings,
+                                    status = meterStatus,
+                                    serviceRunning = serviceRunning,
+                                    scanning = scanning,
+                                    found = found,
+                                    recent = recent,
+                                    actions = MeterActions(
+                                        onScan = vm::startMeterScan,
+                                        onStopScan = vm::stopMeterScan,
+                                        onPair = { meter, onResult -> vm.pairMeter(meter, onResult) },
+                                        onForget = { vm.forgetMeter() },
+                                    ),
+                                    onBack = back,
+                                )
                             }
-                        },
-                        onBack = { screen = Screen.ServerAddress },
-                    )
-                    Screen.ServerStatus -> ServerStatusScreen(
-                        purpose = purpose,
-                        settings = settings,
-                        actions = ServerStatusActions(
-                            onNow = { if (purpose == ServerPurpose.Follow) vm.refreshFromServer() else vm.uploadNow() },
-                            onDisconnect = {
-                                vm.disconnectServer(purpose)
-                                screen = serverReturn
-                            },
-                            onUploadInterval = vm::setUploadInterval,
-                            onUploadWifiOnly = vm::setUploadWifiOnly,
-                            onBackground = enableCollector,
-                        ),
-                        onBack = { screen = serverReturn },
-                    )
-                    Screen.Home -> HomeScreen(
-                        state = state,
-                        onWindow = vm::setWindow,
-                        onOpenSettings = { screen = Screen.Settings },
-                        onOpenDiagnostics = { screen = Screen.Diagnostics },
-                        onOpenServer = { openServer(Screen.Home) },
-                        onStart = { enableCollector(true) },
-                    )
+                            Screen.Alarms -> AlarmsScreen(
+                                configs = alarmConfigs,
+                                mmol = settings.useMmol,
+                                receiving = settings.collectorEnabled,
+                                onOpen = { type -> alarmType = type; open(Screen.AlarmDetail) },
+                                onToggle = { type, on -> toggleAlarm(alarmConfigs.getValue(type), on) },
+                                onTest = { delayed -> vm.testAlarm(alarmConfigs.getValue(AlarmType.UrgentLow), delayed) },
+                                pausedUntil = alarmsPausedUntil,
+                                onPause = pauseAlarms,
+                            )
+                            Screen.AlarmDetail -> {
+                                val config = alarmConfigs.getValue(alarmType)
+                                AlarmDetailScreen(
+                                    config = config,
+                                    mmol = settings.useMmol,
+                                    actions = AlarmDetailActions(
+                                        onChange = vm::saveAlarm,
+                                        onToggle = { on -> toggleAlarm(config, on) },
+                                        onPreview = vm::previewAlarm,
+                                        onStopPreview = vm::stopAlarmPreview,
+                                        onTest = { delayed -> vm.testAlarm(config, delayed) },
+                                        onPickSystemSound = {
+                                            soundPicker.launch(
+                                                Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_RINGTONE)
+                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Suono per \"${config.type.title}\"")
+                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
+                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, if (config.builtInSound == null) Uri.parse(config.sound) else null),
+                                            )
+                                        },
+                                    ),
+                                    onBack = back,
+                                )
+                            }
+                            Screen.Diagnostics -> DiagnosticsScreen(
+                                settings = settings,
+                                status = state.status,
+                                onBack = back,
+                            )
+                            Screen.ServerAddress -> ServerAddressScreen(
+                                purpose = purpose,
+                                initialUrl = (if (purpose == ServerPurpose.Follow) settings.followUrl else settings.serverUrl).removePrefix("https://"),
+                                onCheck = vm::checkServer,
+                                onFound = { url ->
+                                    pendingUrl = url
+                                    open(Screen.ServerLogin)
+                                },
+                                onBack = back,
+                            )
+                            Screen.ServerLogin -> ServerLoginScreen(
+                                purpose = purpose,
+                                url = pendingUrl,
+                                initialUser = if (purpose == ServerPurpose.Follow) settings.followUser else settings.serverUser,
+                                onLogin = { user, password, totp, onResult ->
+                                    vm.connectServer(purpose, pendingUrl, user, password, totp, onResult)
+                                },
+                                onDone = {
+                                    if (purpose == ServerPurpose.Follow) {
+                                        // The background service starts on its own: ask once to show its notification.
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                            ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                                        ) notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        stack = listOf(Screen.Home)
+                                    } else {
+                                        // Setup done: Back from the status returns to where it started.
+                                        stack = stack.filter { it != Screen.ServerAddress && it != Screen.ServerLogin } + Screen.ServerStatus
+                                    }
+                                },
+                                onBack = back,
+                            )
+                            Screen.ServerStatus -> ServerStatusScreen(
+                                purpose = purpose,
+                                settings = settings,
+                                actions = ServerStatusActions(
+                                    onNow = { if (purpose == ServerPurpose.Follow) vm.refreshFromServer() else vm.uploadNow() },
+                                    onDisconnect = {
+                                        vm.disconnectServer(purpose)
+                                        back()
+                                    },
+                                    onUploadInterval = vm::setUploadInterval,
+                                    onUploadWifiOnly = vm::setUploadWifiOnly,
+                                    onBackground = enableCollector,
+                                ),
+                                onBack = back,
+                            )
+                            Screen.Home -> HomeScreen(
+                                state = state,
+                                onWindow = vm::setWindow,
+                                onOpenSensorSettings = { open(Screen.SettingsSensor) },
+                                onOpenDiagnostics = { open(Screen.Diagnostics) },
+                                onOpenServer = openServer,
+                                onStart = { enableCollector(true) },
+                                activeAlarm = activeAlarm,
+                                onSnoozeAlarm = { type -> G7App.instance.alarms.snooze(type) },
+                                alarmsPausedUntil = alarmsPausedUntil,
+                                onResumeAlarms = { vm.pauseAlarms(null) },
+                                update = updateState,
+                                updateActions = updateActions,
+                            )
+                        }
+                    }
                 }
             }
         }

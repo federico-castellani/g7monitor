@@ -20,7 +20,8 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 
 /** The alarm on screen / ringing now. */
-data class ActiveAlarm(val type: AlarmType, val text: String, val since: Long, val snoozeMin: Int)
+/** @param test started from the settings ("Prova"): never snoozes nor hides a real alarm. */
+data class ActiveAlarm(val type: AlarmType, val text: String, val since: Long, val snoozeMin: Int, val test: Boolean = false)
 
 /**
  * Checks the alarms after every new reading (sensor or server) and at the moment a
@@ -42,6 +43,21 @@ class AlarmEngine(private val app: G7App) {
         val configs = app.alarmSettings.current()
         val s = app.settings.current()
         val now = System.currentTimeMillis()
+
+        // All alarms paused: nothing rings (a test still does), and the phone wakes when the pause ends.
+        val pausedUntil = app.alarmSettings.pausedUntil()
+        if (pausedUntil != null && pausedUntil > now) {
+            _active.value?.let { if (!it.test) clear() }
+            val am = app.getSystemService(AlarmManager::class.java)
+            am.cancel(checkIntent(SIGNAL_CHECK))
+            if (pausedUntil != AlarmRepository.PAUSED_UNTIL_RESUMED) setExact(am, pausedUntil - now + 1_000L, checkIntent(RESUME_CHECK))
+            return@withLock
+        }
+        if (pausedUntil != null) {
+            app.alarmSettings.setPausedUntil(null)
+            DebugLog.log("allarmi riattivati: sospensione scaduta")
+        }
+
         val recent = app.readings.since(now - 30 * 60_000L)
         val newest = app.readings.newestTimestamp()
         val triggered = AlarmRules.triggered(
@@ -51,11 +67,11 @@ class AlarmEngine(private val app: G7App) {
         )
 
         // The ringing alarm is no longer true (or was disabled): stop it.
-        _active.value?.let { if (it.type !in triggered) clear() }
+        _active.value?.let { if (!it.test && it.type !in triggered) clear() }
 
         val candidate = triggered.filter { (snoozedUntil[it] ?: 0L) <= now }.minByOrNull { it.priority }
         if (candidate != null) {
-            val current = _active.value?.type
+            val current = _active.value?.takeUnless { it.test }?.type // a real alarm replaces a test
             val outranks = current == null || candidate.priority < current.priority
             val again = candidate == current && now - (lastAlertAt[candidate] ?: 0L) >= REALERT_MS
             if (outranks || again) fire(configs.getValue(candidate), recent.lastOrNull(), newest, now, s.useMmol)
@@ -65,14 +81,56 @@ class AlarmEngine(private val app: G7App) {
 
     /** "Posticipa": silence this alarm for its snooze time. */
     fun snooze(type: AlarmType) {
+        val a = _active.value
+        if (a?.test == true && a.type == type) {
+            clear() // a test only needs to stop
+            return
+        }
         val minutes = _active.value?.takeIf { it.type == type }?.snoozeMin ?: type.snoozeMin
         snoozedUntil[type] = System.currentTimeMillis() + minutes * 60_000L
         DebugLog.log("allarme posticipato: ${type.title} per $minutes min")
         if (_active.value?.type == type) clear()
     }
 
+    /**
+     * Pauses every alarm until [until] ([AlarmRepository.PAUSED_UNTIL_RESUMED]: until resumed), or
+     * resumes them (null). Each alarm's own switch is left as it is.
+     */
+    suspend fun pause(until: Long?) {
+        app.alarmSettings.setPausedUntil(until)
+        if (until == null) app.getSystemService(AlarmManager::class.java).cancel(checkIntent(RESUME_CHECK))
+        DebugLog.log(if (until == null) "allarmi riattivati" else "allarmi sospesi")
+        evaluate()
+    }
+
     /** Settings preview ("Prova"): a few seconds of sound and vibration. */
     fun preview(config: AlarmConfig) = player.start(config, PREVIEW_MS)
+
+    /**
+     * Full test of an alarm: notification, full-screen page, sound and vibration exactly as a real
+     * one, marked "PROVA". It rings for [TEST_RING_MS] and stays until "Posticipa" (or swipe).
+     */
+    fun test(config: AlarmConfig) {
+        if (_active.value?.test == false) return // a real alarm is ringing: never cover it
+        val text = "PROVA · nessun valore reale"
+        _active.value = ActiveAlarm(config.type, text, System.currentTimeMillis(), config.snoozeMin, test = true)
+        DebugLog.log("prova allarme: ${config.type.title}")
+        player.start(config, TEST_RING_MS)
+        notifyAlarm(config, text)
+    }
+
+    /** Test in [delayMs], to lock the phone meanwhile and see the alarm on the lock screen. */
+    fun scheduleTest(type: AlarmType, delayMs: Long) {
+        val pi = PendingIntent.getBroadcast(
+            app, 13, Intent(app, AlarmReceiver::class.java).setAction(AlarmReceiver.ACTION_TEST)
+                .putExtra(AlarmReceiver.EXTRA_TYPE, type.name),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val am = app.getSystemService(AlarmManager::class.java)
+        val at = SystemClock.elapsedRealtime() + delayMs
+        if (am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
+        else am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
+    }
 
     fun stopPreview() {
         if (_active.value == null) player.stop()
@@ -110,15 +168,30 @@ class AlarmEngine(private val app: G7App) {
         )
         val n = NotificationCompat.Builder(app, G7App.CHANNEL_ALARMS)
             .setSmallIcon(R.drawable.ic_notification)
+            // Short title and text: Samsung's compact pop-up puts them side by side on one line.
             .setContentTitle(config.type.title)
             .setContentText(text)
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .setBigContentTitle(config.type.title)
+                    .bigText(
+                        "$text\n\nPosticipa per silenziarlo ${config.snoozeMin} minuti. " +
+                            "Se non lo posticipi risuona a ogni nuova lettura finché la condizione resta vera.",
+                    )
+            )
+            // Own group: never bundled with the status notification (a closed bundle hides the buttons).
+            .setGroup(GROUP_ALARM)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setColor(0xFFD93A3F.toInt())
             .setOngoing(true)
+            .setAutoCancel(false)
             .setContentIntent(open)
             .setFullScreenIntent(open, true)
-            .addAction(0, "Posticipa ${config.snoozeMin} min", snooze)
+            // Android 14+ lets the user swipe even "ongoing" notifications away: that silences it like "Posticipa".
+            .setDeleteIntent(snooze)
+            .addAction(R.drawable.ic_notification, "Posticipa ${config.snoozeMin} min", snooze)
             .build()
         app.getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
     }
@@ -126,16 +199,22 @@ class AlarmEngine(private val app: G7App) {
     /** Wakes the phone when the next reading would be overdue, so signal loss rings on time even in Doze. */
     private fun scheduleSignalCheck(config: AlarmConfig, newest: Long?, receiving: Boolean, now: Long) {
         val am = app.getSystemService(AlarmManager::class.java)
-        val pi = PendingIntent.getBroadcast(
-            app, 12, Intent(app, AlarmReceiver::class.java).setAction(AlarmReceiver.ACTION_CHECK),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val pi = checkIntent(SIGNAL_CHECK)
         if (!config.enabled || !receiving) {
             am.cancel(pi)
             return
         }
         val due = (newest ?: now) + config.value * 60_000L
-        val inMs = if (due > now) due - now + 5_000L else REALERT_MS
+        setExact(am, if (due > now) due - now + 5_000L else REALERT_MS, pi)
+    }
+
+    /** "Check the alarms now" at a set time: [SIGNAL_CHECK] or [RESUME_CHECK] (different request codes, independent). */
+    private fun checkIntent(requestCode: Int) = PendingIntent.getBroadcast(
+        app, requestCode, Intent(app, AlarmReceiver::class.java).setAction(AlarmReceiver.ACTION_CHECK),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    private fun setExact(am: AlarmManager, inMs: Long, pi: PendingIntent) {
         val at = SystemClock.elapsedRealtime() + inMs
         if (am.canScheduleExactAlarms()) am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
         else am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi)
@@ -143,9 +222,13 @@ class AlarmEngine(private val app: G7App) {
 
     companion object {
         const val NOTIFICATION_ID = 20
+        private const val GROUP_ALARM = "it.federico.g7monitor.ALARM"
+        private const val SIGNAL_CHECK = 12
+        private const val RESUME_CHECK = 14
         /** An unanswered alarm rings again after this long, if still true. */
         private const val REALERT_MS = 5 * 60_000L - 30_000L
         private const val RING_MS = 2 * 60_000L
         private const val PREVIEW_MS = 4_000L
+        private const val TEST_RING_MS = 30_000L
     }
 }

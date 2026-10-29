@@ -2,6 +2,7 @@ package it.federico.g7monitor.alarm
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import it.federico.g7monitor.R
@@ -115,5 +116,24 @@ class AlarmRepository(private val context: Context) {
 
     suspend fun save(config: AlarmConfig) {
         context.alarmStore.edit { it[key(config.type)] = config.toJson() }
+    }
+
+    private val pausedKey = longPreferencesKey("alarms_paused_until")
+
+    /**
+     * All alarms silenced until this time ([PAUSED_UNTIL_RESUMED]: until turned back on), null when
+     * active. Each alarm keeps its own switch, so resuming brings back exactly the ones that were on.
+     * An expired time is removed by [AlarmEngine.evaluate].
+     */
+    val pausedUntil: Flow<Long?> = context.alarmStore.data.map { it[pausedKey] }
+
+    suspend fun pausedUntil(): Long? = pausedUntil.first()
+
+    suspend fun setPausedUntil(until: Long?) {
+        context.alarmStore.edit { if (until == null) it.remove(pausedKey) else it[pausedKey] = until }
+    }
+
+    companion object {
+        const val PAUSED_UNTIL_RESUMED = Long.MAX_VALUE
     }
 }

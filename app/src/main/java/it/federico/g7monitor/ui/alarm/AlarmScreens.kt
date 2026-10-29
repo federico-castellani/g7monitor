@@ -7,6 +7,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.outlined.KeyboardDoubleArrowUp
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SignalWifiOff
 import androidx.compose.material.icons.outlined.Snooze
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import it.federico.g7monitor.alarm.AlarmConfig
 import it.federico.g7monitor.alarm.AlarmOutput
+import it.federico.g7monitor.alarm.AlarmRepository
 import it.federico.g7monitor.alarm.AlarmType
 import it.federico.g7monitor.alarm.BuiltInSound
 import it.federico.g7monitor.alarm.ValueKind
@@ -81,6 +86,8 @@ import it.federico.g7monitor.ui.components.SectionCard
 import it.federico.g7monitor.ui.components.SettingRow
 import it.federico.g7monitor.ui.theme.LocalRangeColors
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /** Order shown in the list: from the lowest glucose to the highest, then signal. */
@@ -120,12 +127,13 @@ fun AlarmConfig.valueText(mmol: Boolean, value: Int = this.value): String = when
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Page(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+private fun Page(title: String, onBack: (() -> Unit)?, content: @Composable () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") } },
+                // No back arrow on a tab of the bottom bar.
+                navigationIcon = { if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") } },
             )
         },
     ) { padding ->
@@ -149,13 +157,19 @@ fun AlarmsScreen(
     receiving: Boolean,
     onOpen: (AlarmType) -> Unit,
     onToggle: (AlarmType, Boolean) -> Unit,
-    onBack: () -> Unit,
+    onTest: (delayed: Boolean) -> Unit,
+    /** All alarms paused until this time, null when active. */
+    pausedUntil: Long? = null,
+    /** Pause until a time, or resume (null). */
+    onPause: (Long?) -> Unit = {},
+    onBack: (() -> Unit)? = null,
 ) {
     Page("Allarmi", onBack) {
+        MasterSwitch(pausedUntil, onPause)
         Warnings(receiving)
         Text(
-            "Gli allarmi suonano sul canale \"sveglia\" del telefono, anche in modalità silenziosa. " +
-                "Per disattivarne uno serve lo sblocco del telefono.",
+            "Tocca un allarme per soglia, suono e vibrazione. Suonano sul canale \"sveglia\" del telefono, " +
+                "anche in modalità silenziosa; per disattivarne uno serve lo sblocco del telefono.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         for (type in ORDER) {
@@ -179,6 +193,80 @@ fun AlarmsScreen(
                 }
             }
         }
+        SectionCard("Prova le notifiche", Icons.Outlined.PlayArrow) {
+            TestButtons(onTest)
+        }
+    }
+}
+
+/** "Sospesi fino alle 21:30", "Sospesi finché non li riattivi". */
+fun pausedText(until: Long): String = when {
+    until == AlarmRepository.PAUSED_UNTIL_RESUMED -> "Sospesi finché non li riattivi"
+    else -> {
+        val day = { t: Long -> SimpleDateFormat("yyyyMMdd", Locale.ITALY).format(Date(t)) }
+        val time = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(until))
+        if (day(until) == day(System.currentTimeMillis())) "Sospesi fino alle $time" else "Sospesi fino a domani alle $time"
+    }
+}
+
+/** Pause durations offered, in minutes (null: until turned back on). */
+private val PAUSES = listOf(30 to "30 minuti", 60 to "1 ora", 120 to "2 ore", 480 to "8 ore", null to "Finché non li riattivo")
+
+/**
+ * Pauses every alarm at once without touching each one's switch: when they come back (by hand or
+ * at the end of the chosen time) exactly the alarms that were on are on again.
+ */
+@Composable
+private fun MasterSwitch(pausedUntil: Long?, onPause: (Long?) -> Unit) {
+    var choose by remember { mutableStateOf(false) }
+    val paused = pausedUntil != null && pausedUntil > System.currentTimeMillis()
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (paused) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (paused) Icons.Outlined.NotificationsOff else Icons.Outlined.NotificationsActive, contentDescription = null)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Tutti gli allarmi", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(
+                    if (paused) pausedText(pausedUntil!!) + " · le impostazioni restano salvate"
+                    else "Attivi · spegnili qui per sospenderli tutti insieme",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Switch(checked = !paused, onCheckedChange = { on -> if (on) onPause(null) else choose = true })
+        }
+    }
+    if (choose) {
+        AlertDialog(
+            onDismissRequest = { choose = false },
+            icon = { Icon(Icons.Outlined.NotificationsOff, contentDescription = null) },
+            title = { Text("Sospendere tutti gli allarmi?") },
+            text = {
+                Column {
+                    Text(
+                        "Nessun allarme suonerà. Ciascuno mantiene le sue impostazioni e torna attivo alla ripresa.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    for ((minutes, label) in PAUSES) {
+                        TextButton(
+                            onClick = {
+                                choose = false
+                                onPause(minutes?.let { System.currentTimeMillis() + it * 60_000L } ?: AlarmRepository.PAUSED_UNTIL_RESUMED)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(label, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { choose = false }) { Text("Annulla") } },
+        )
     }
 }
 
@@ -217,6 +305,8 @@ class AlarmDetailActions(
     val onPreview: (AlarmConfig) -> Unit,
     val onStopPreview: () -> Unit,
     val onPickSystemSound: () -> Unit,
+    /** Full test (notification, full-screen page, sound); delayed = in 10 s, to lock the phone meanwhile. */
+    val onTest: (delayed: Boolean) -> Unit,
 )
 
 @Composable
@@ -340,12 +430,12 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionCard("Prova", Icons.Outlined.PlayArrow) {
             if (!previewing) {
-                FilledTonalButton(onClick = { previewing = true; actions.onPreview(config) }) {
+                OutlinedButton(onClick = { previewing = true; actions.onPreview(config) }) {
                     Icon(Icons.Outlined.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Prova")
+                    Text("Ascolta suono")
                 }
             } else {
                 OutlinedButton(onClick = { previewing = false; actions.onStopPreview() }) {
@@ -354,6 +444,25 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
                     Text("Ferma")
                 }
             }
+            TestButtons(actions.onTest)
         }
+    }
+}
+
+/** "Prova allarme" now, or in 10 s to see it on the lock screen. */
+@Composable
+private fun TestButtons(onTest: (delayed: Boolean) -> Unit) {
+    val context = LocalContext.current
+    Text(
+        "Fa scattare l'allarme come se fosse vero (notifica, pagina a tutto schermo, suono e vibrazione), " +
+            "segnato come PROVA. Fermalo con Posticipa. Con \"tra 10 s\" hai il tempo di bloccare il telefono.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton(onClick = { onTest(false) }) { Text("Prova allarme") }
+        OutlinedButton(onClick = {
+            onTest(true)
+            Toast.makeText(context, "L'allarme di prova suonerà tra 10 secondi: blocca il telefono", Toast.LENGTH_LONG).show()
+        }) { Text("Prova tra 10 s") }
     }
 }

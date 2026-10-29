@@ -65,9 +65,17 @@ class AlarmActivity : ComponentActivity() {
                 ) {
                     Icon(Icons.Outlined.NotificationsActive, contentDescription = null, tint = color, modifier = Modifier.size(72.dp))
                     Spacer(Modifier.height(20.dp))
-                    Text(a.type.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(12.dp))
-                    Text(a.text, fontSize = 44.sp, fontWeight = FontWeight.Bold, color = color, textAlign = TextAlign.Center)
+                    Text(
+                        a.type.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    // A value ("52 mg/dL ↓") stays big; longer texts (signal loss, test) get a size that wraps cleanly.
+                    val size = if (a.text.length <= 14) 44.sp else 28.sp
+                    Text(
+                        a.text, fontSize = size, lineHeight = size * 1.25f, fontWeight = FontWeight.Bold,
+                        color = color, textAlign = TextAlign.Center,
+                    )
                     Spacer(Modifier.height(48.dp))
                     Button(
                         onClick = { engine.snooze(a.type); finish() },

@@ -35,6 +35,8 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import it.federico.g7monitor.update.AppRelease
+import it.federico.g7monitor.update.UpdateState
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -115,8 +117,30 @@ class MainViewModel : ViewModel() {
         app.alarms.evaluate()
     }
 
+    /** All alarms paused until this time (see AlarmRepository.pausedUntil), null when active. */
+    val alarmsPausedUntil: StateFlow<Long?> = app.alarmSettings.pausedUntil
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun pauseAlarms(until: Long?) = viewModelScope.launch { app.alarms.pause(until) }
+
     fun previewAlarm(config: AlarmConfig) = app.alarms.preview(config)
+
+    fun testAlarm(config: AlarmConfig, delayed: Boolean) {
+        if (delayed) app.alarms.scheduleTest(config.type, 10_000L) else app.alarms.test(config)
+    }
     fun stopAlarmPreview() = app.alarms.stopPreview()
+
+    // ---------------------------------------------------------------- app updates
+
+    val updateState: StateFlow<UpdateState> = app.updater.state
+    val installedVersion: String = app.updater.installedVersion
+
+    /** [force]: "Controlla ora"; otherwise at most every few hours (called whenever the app is opened). */
+    fun checkForUpdates(force: Boolean) = viewModelScope.launch { app.updater.check(force) }
+
+    fun installUpdate(release: AppRelease) = viewModelScope.launch { app.updater.install(release) }
+
+    fun resetUpdate() = app.updater.reset()
 
     fun setWindow(w: ChartWindow) { window.value = w }
 

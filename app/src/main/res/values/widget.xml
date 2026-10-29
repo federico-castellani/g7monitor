@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_description">Glicemia attuale con freccia, variazione e grafico delle ultime 3 ore</string>
+    <color name="widget_bg">#F2FFFFFF</color>
+    <color name="widget_text">#DE000000</color>
+    <color name="widget_text_secondary">#8A000000</color>
+</resources>

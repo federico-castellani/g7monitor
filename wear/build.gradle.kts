@@ -13,8 +13,20 @@ android {
         applicationId = "it.federico.g7monitor"
         minSdk = 30          // Wear OS 3+ (Galaxy Watch 4 and later)
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = rootProject.extra["appVersionCode"] as Int
+        versionName = rootProject.extra["appVersionName"] as String
+    }
+
+    signingConfigs {
+        // Release key from the root build (CI secrets or keystore.properties), when available.
+        (rootProject.extra["releaseStoreFile"] as String?)?.let { path ->
+            create("release") {
+                storeFile = file(path)
+                storePassword = rootProject.extra["releaseStorePassword"] as String
+                keyAlias = rootProject.extra["releaseKeyAlias"] as String
+                keyPassword = rootProject.extra["releaseKeyPassword"] as String
+            }
+        }
     }
 
     buildTypes {
@@ -22,8 +34,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Must match the phone app's key, or the two cannot talk to each other.
-            signingConfig = signingConfigs.getByName("debug")
+            // Phone and watch must share the key, or the two cannot talk to each other.
+            // Without a release key (fresh checkout) the debug key keeps the build installable.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

@@ -15,6 +15,16 @@ class AlarmReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_SNOOZE -> AlarmType.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_TYPE) }
                 ?.let(app.alarms::snooze)
+            ACTION_TEST -> AlarmType.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_TYPE) }?.let { type ->
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.Default).launch {
+                    try {
+                        app.alarms.test(app.alarmSettings.current().getValue(type))
+                    } finally {
+                        pending.finish()
+                    }
+                }
+            }
             ACTION_CHECK -> {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.Default).launch {
@@ -31,6 +41,7 @@ class AlarmReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_SNOOZE = "it.federico.g7monitor.alarm.SNOOZE"
         const val ACTION_CHECK = "it.federico.g7monitor.alarm.CHECK"
+        const val ACTION_TEST = "it.federico.g7monitor.alarm.TEST"
         const val EXTRA_TYPE = "type"
     }
 }

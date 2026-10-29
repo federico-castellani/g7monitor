@@ -7,6 +7,18 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import it.federico.g7monitor.ui.components.IconBadge
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,13 +34,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.QrCodeScanner
@@ -36,6 +45,7 @@ import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
@@ -80,6 +90,10 @@ import it.federico.g7monitor.ui.Glucose
 import it.federico.g7monitor.ui.components.SectionCard
 import it.federico.g7monitor.ui.components.SettingRow
 import it.federico.g7monitor.ui.theme.LocalRangeColors
+import it.federico.g7monitor.ui.update.UpdateActions
+import it.federico.g7monitor.ui.update.UpdatesPanel
+import it.federico.g7monitor.ui.update.updateSummary
+import it.federico.g7monitor.update.UpdateState
 
 class SettingsActions(
     val onPairingCode: (String) -> Unit,
@@ -91,19 +105,34 @@ class SettingsActions(
     val onDataSource: (DataSource) -> Unit,
     /** Opens the server pages (setup or status) for the current mode. */
     val onOpenServer: () -> Unit,
-    val onOpenAlarms: () -> Unit,
     val onOpenMeter: () -> Unit,
+    val onOpenDiagnostics: () -> Unit,
+    val onOpenPage: (SettingsPage) -> Unit,
+    val update: UpdateActions,
 )
+
+/** App version and update state, shown in the menu and on the Aggiornamenti page. */
+class UpdateInfo(val state: UpdateState, val installed: String)
+
+/** Pages opened from the settings menu. */
+enum class SettingsPage(val title: String) {
+    Sensor("Sensore G7"),
+    Service("Servizio in background"),
+    Display("Visualizzazione"),
+    Source("Origine dei dati"),
+    Updates("Aggiornamenti"),
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, actions: SettingsActions, onBack: () -> Unit) {
+private fun SettingsScaffold(title: String, onBack: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Impostazioni") },
+                title = { Text(title) },
+                // No back arrow on a tab of the bottom bar.
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") }
+                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") }
                 },
             )
         },
@@ -116,36 +145,184 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, actions: Sett
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            DataSourceSection(settings, actions)
-            ServiceSection(settings, serviceRunning, actions)
-            // Each mode shows only its own settings.
-            if (settings.dataSource == DataSource.Server) {
-                ServerLinkSection(settings, actions)
-                AlarmsSection(actions)
-                DisplaySection(settings, actions)
-            } else {
-                SensorSection(settings, actions)
-                MeterSection(settings, actions)
-                ServerLinkSection(settings, actions)
-                AlarmsSection(actions)
-                DisplaySection(settings, actions)
-                CertificateSection(settings, actions)
-            }
-            Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.Top) {
-                Icon(
-                    Icons.Outlined.Info, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "Protocollo G7 basato su xDrip+ (GPLv3). Questa app non è un dispositivo medico: " +
-                        "non usarla per decisioni terapeutiche senza verificare con un dispositivo approvato.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            content()
             Spacer(Modifier.height(20.dp))
         }
+    }
+}
+
+/**
+ * Settings menu: one line per topic with what is set now; each opens its own page.
+ * Each mode (sensor / server) lists only its own topics.
+ */
+@Composable
+fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: UpdateInfo, actions: SettingsActions) {
+    val sensorMode = settings.dataSource != DataSource.Server
+    val ok = LocalRangeColors.current.inRange
+    val warn = MaterialTheme.colorScheme.error
+    SettingsScaffold("Impostazioni", onBack = null) {
+        MenuGroup("Collegamenti") {
+            if (sensorMode) {
+                val (summary, tint) = when {
+                    settings.pairingCode.isBlank() -> "Inserisci il codice di abbinamento" to warn
+                    !settings.hasCertificates && settings.sensorMac == null -> "Manca il certificato per il primo abbinamento" to warn
+                    settings.sensorMac != null -> "Abbinato · codice ${settings.pairingCode}" to ok
+                    else -> "Codice ${settings.pairingCode} · in attesa del sensore" to null
+                }
+                MenuRow(Icons.Outlined.Sensors, "Sensore G7", summary, tint) { actions.onOpenPage(SettingsPage.Sensor) }
+                MenuRow(
+                    Icons.Outlined.WaterDrop, "Glucometro",
+                    settings.meterName ?: (if (settings.meterMac != null) "Abbinato" else "Facoltativo · non abbinato"),
+                    if (settings.meterMac != null) ok else null,
+                    onClick = actions.onOpenMeter,
+                )
+            }
+            val follow = !sensorMode
+            val connected = if (follow) settings.followConnected else settings.serverConnected
+            val error = if (follow) settings.followError else settings.uploadError
+            MenuRow(
+                Icons.Outlined.Cloud, if (follow) "Server (ricezione)" else "Server (caricamento)",
+                when {
+                    error != null -> error
+                    connected -> "Collegato come ${if (follow) settings.followUser else settings.serverUser}"
+                    follow -> "Da configurare"
+                    else -> "Facoltativo · non configurato"
+                },
+                when {
+                    error != null || (follow && !connected) -> warn
+                    connected -> ok
+                    else -> null
+                },
+                onClick = actions.onOpenServer,
+            )
+        }
+        MenuGroup("App") {
+            val on = settings.collectorEnabled
+            MenuRow(
+                Icons.Outlined.PowerSettingsNew, "Servizio in background",
+                when {
+                    on && serviceRunning -> "Attivo · anche ad app chiusa"
+                    on -> "In avvio…"
+                    else -> "Fermo · allarmi spenti ad app chiusa"
+                },
+                if (on && serviceRunning) ok else warn,
+            ) { actions.onOpenPage(SettingsPage.Service) }
+            MenuRow(
+                Icons.Outlined.Tune, "Visualizzazione",
+                "${Glucose.unit(settings.useMmol)} · target ${Glucose.format(settings.lowMgdl, settings.useMmol)}–" +
+                    Glucose.format(settings.highMgdl, settings.useMmol),
+            ) { actions.onOpenPage(SettingsPage.Display) }
+            MenuRow(
+                Icons.Outlined.SwapHoriz, "Origine dei dati",
+                if (sensorMode) "Sensore G7 via Bluetooth" else "Server G7 Monitor",
+            ) { actions.onOpenPage(SettingsPage.Source) }
+            val available = update.state is UpdateState.Available || update.state is UpdateState.NeedsPermission
+            MenuRow(
+                Icons.Outlined.SystemUpdate, "Aggiornamenti", updateSummary(update.state, update.installed),
+                when {
+                    available -> MaterialTheme.colorScheme.tertiary
+                    update.state is UpdateState.Failed -> warn
+                    else -> null
+                },
+            ) { actions.onOpenPage(SettingsPage.Updates) }
+            if (sensorMode) {
+                MenuRow(Icons.Outlined.MonitorHeart, "Diagnostica", "Stato del collegamento e registro eventi", onClick = actions.onOpenDiagnostics)
+            }
+        }
+        Disclaimer()
+    }
+}
+
+/** A page of the settings menu. */
+@Composable
+fun SettingsPageScreen(
+    page: SettingsPage,
+    settings: AppSettings,
+    serviceRunning: Boolean,
+    update: UpdateInfo,
+    actions: SettingsActions,
+    onBack: () -> Unit,
+) {
+    SettingsScaffold(page.title, onBack) {
+        when (page) {
+            SettingsPage.Sensor -> {
+                SensorSection(settings, actions)
+                CertificateSection(settings, actions)
+            }
+            SettingsPage.Service -> ServiceSection(settings, serviceRunning, actions)
+            SettingsPage.Display -> DisplaySection(settings, actions)
+            SettingsPage.Source -> DataSourceSection(settings, actions)
+            SettingsPage.Updates -> Panel { UpdatesPanel(update.state, update.installed, actions.update) }
+        }
+    }
+}
+
+@Composable
+private fun MenuGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp),
+        )
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Column(Modifier.padding(vertical = 6.dp), content = content)
+        }
+    }
+}
+
+/** Menu line: icon, title, current state (tinted when it needs attention or is fine) and a chevron. */
+@Composable
+private fun MenuRow(icon: ImageVector, title: String, summary: String, summaryTint: Color? = null, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconBadge(icon, size = 36.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                summary, style = MaterialTheme.typography.bodySmall,
+                color = summaryTint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Card without a header, for pages that hold a single topic (the page title says what it is). */
+@Composable
+private fun Panel(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+    }
+}
+
+@Composable
+private fun Disclaimer() {
+    Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.Top) {
+        Icon(
+            Icons.Outlined.Info, contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "Protocollo G7 basato su xDrip+ (GPLv3). Questa app non è un dispositivo medico: " +
+                "non usarla per decisioni terapeutiche senza verificare con un dispositivo approvato.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -155,7 +332,7 @@ private fun SensorSection(settings: AppSettings, actions: SettingsActions) {
     var confirmForget by remember { mutableStateOf(false) }
     val valid = code.matches(Regex("\\d{4}|\\d{6}"))
 
-    SectionCard("Sensore", Icons.Outlined.Sensors) {
+    SectionCard("Abbinamento", Icons.Outlined.Key) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = code,
@@ -201,7 +378,7 @@ private fun DisplaySection(settings: AppSettings, actions: SettingsActions) {
     var low by remember(settings.lowMgdl) { mutableFloatStateOf(settings.lowMgdl.toFloat()) }
     var high by remember(settings.highMgdl) { mutableFloatStateOf(settings.highMgdl.toFloat()) }
 
-    SectionCard("Visualizzazione", Icons.Outlined.Tune) {
+    Panel {
         Text("Unità di misura", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             listOf(false to "mg/dL", true to "mmol/L").forEachIndexed { i, (v, label) ->
@@ -232,7 +409,7 @@ private fun DisplaySection(settings: AppSettings, actions: SettingsActions) {
 @Composable
 private fun DataSourceSection(settings: AppSettings, actions: SettingsActions) {
     var pending by remember { mutableStateOf<DataSource?>(null) }
-    SectionCard("Origine dei dati", Icons.Outlined.SwapHoriz) {
+    Panel {
         val options = listOf(DataSource.Sensor to "Sensore G7", DataSource.Server to "Server")
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { i, (source, label) ->
@@ -267,64 +444,6 @@ private fun DataSourceSection(settings: AppSettings, actions: SettingsActions) {
     }
 }
 
-@Composable
-private fun MeterSection(settings: AppSettings, actions: SettingsActions) {
-    SectionCard("Glucometro", Icons.Outlined.WaterDrop) {
-        if (settings.meterMac != null) {
-            SettingRow(
-                Icons.Outlined.CheckCircle, settings.meterName ?: "Glucometro abbinato",
-                "Le misurazioni arrivano da sole dopo ogni test",
-                iconTint = LocalRangeColors.current.inRange,
-            )
-        } else {
-            Text(
-                "Facoltativo: abbina un glucometro Bluetooth e ogni misurazione arriverà da sola nell'app e sul server.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        FilledTonalButton(onClick = actions.onOpenMeter) { Text(if (settings.meterMac != null) "Gestisci" else "Abbina glucometro") }
-    }
-}
-
-@Composable
-private fun AlarmsSection(actions: SettingsActions) {
-    SectionCard("Allarmi", Icons.Outlined.NotificationsActive) {
-        Text(
-            "Glicemia bassa e alta, molto bassa e molto alta, variazioni rapide e mancanza di segnale: " +
-                "soglie, suoni e vibrazione per ciascuno.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        FilledTonalButton(onClick = actions.onOpenAlarms) { Text("Gestisci allarmi") }
-    }
-}
-
-/** Entry to the server pages: address and credentials when not linked, status when linked. */
-@Composable
-private fun ServerLinkSection(settings: AppSettings, actions: SettingsActions) {
-    val follow = settings.dataSource == DataSource.Server
-    val connected = if (follow) settings.followConnected else settings.serverConnected
-    val error = if (follow) settings.followError else settings.uploadError
-    SectionCard(if (follow) "Server (ricezione)" else "Server (caricamento)", Icons.Outlined.Cloud) {
-        if (connected) {
-            SettingRow(
-                Icons.Outlined.CloudDone,
-                "Collegato come ${if (follow) settings.followUser else settings.serverUser}",
-                (if (follow) settings.followUrl else settings.serverUrl).removePrefix("https://"),
-                iconTint = LocalRangeColors.current.inRange,
-            )
-        } else {
-            Text(
-                if (follow) "Collega il server da cui ricevere le glicemie."
-                else "Facoltativo: carica le glicemie su un server G7 Monitor per vederle dal browser e condividerle. " +
-                    "Senza server l'app funziona normalmente.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-        FilledTonalButton(onClick = actions.onOpenServer) { Text(if (connected) "Gestisci" else "Configura server") }
-    }
-}
-
 /**
  * One button to run the app as a service: started at boot, brought back if Android kills it
  * (see KeepAlive), with what the phone needs so that it is not stopped in the first place.
@@ -336,7 +455,7 @@ private fun ServiceSection(settings: AppSettings, running: Boolean, actions: Set
     val exempt = context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
     val on = settings.collectorEnabled
     val ok = LocalRangeColors.current.inRange
-    SectionCard("Servizio in background", Icons.Outlined.PowerSettingsNew) {
+    Panel {
         SettingRow(
             if (on && running) Icons.Outlined.CheckCircle else Icons.Outlined.PauseCircle,
             when {
