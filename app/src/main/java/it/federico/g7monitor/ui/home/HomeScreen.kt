@@ -168,11 +168,14 @@ fun HomeScreen(
                 )
                 state.fingersticks.lastOrNull()?.let { f ->
                     val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(f.timestamp)) }
+                    // Meter vs sensor at the same moment: a quick check of how far the sensor is off.
+                    val sensor = remember(f, state.readings) { Glucose.sensorAt(state.readings, f.timestamp) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.WaterDrop, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.WaterDrop, contentDescription = null, tint = LocalRangeColors.current.meter, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            "Glucometro: ${Glucose.format(f.mgdl, s.useMmol)} ${Glucose.unit(s.useMmol)} alle $time",
+                            "Glucometro: ${Glucose.format(f.mgdl, s.useMmol)} ${Glucose.unit(s.useMmol)} alle $time" +
+                                (sensor?.let { " · sensore ${Glucose.format(it, s.useMmol)} (${Glucose.formatDifference(f.mgdl, it, s.useMmol)})" } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

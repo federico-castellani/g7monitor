@@ -65,12 +65,12 @@ object GlucoseNotification {
     fun chartBitmap(context: Context, d: GlucoseNotificationData, widthDp: Int, heightDp: Int, detailed: Boolean): Bitmap =
         chart(context, d, palette(context), widthDp, heightDp, detailed)
 
-    private class Palette(val low: Int, val inRange: Int, val high: Int, val line: Int, val grid: Int, val label: Int)
+    private class Palette(val low: Int, val inRange: Int, val high: Int, val line: Int, val grid: Int, val label: Int, val meter: Int, val halo: Int)
 
     private fun palette(context: Context): Palette {
         val night = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        return if (night) Palette(0xFFFF6B6F.toInt(), 0xFF4CD597.toInt(), 0xFFFFC145.toInt(), 0x66FFFFFF, 0x33FFFFFF, 0x99FFFFFF.toInt())
-        else Palette(0xFFD93A3F.toInt(), 0xFF1F9D62.toInt(), 0xFFD98A00.toInt(), 0x55000000, 0x22000000, 0x99000000.toInt())
+        return if (night) Palette(0xFFFF6B6F.toInt(), 0xFF4CD597.toInt(), 0xFFFFC145.toInt(), 0x66FFFFFF, 0x33FFFFFF, 0x99FFFFFF.toInt(), 0xFFC9A2FF.toInt(), 0xFF1E1E22.toInt())
+        else Palette(0xFFD93A3F.toInt(), 0xFF1F9D62.toInt(), 0xFFD98A00.toInt(), 0x55000000, 0x22000000, 0x99000000.toInt(), 0xFF8E44D9.toInt(), 0xFFFFFFFF.toInt())
     }
 
     fun views(context: Context, d: GlucoseNotificationData, expanded: Boolean): RemoteViews {
@@ -170,15 +170,17 @@ object GlucoseNotification {
             paint.color = color(p, r.mgdl, d.low, d.high)
             c.drawCircle(x(r.timestamp), y(r.mgdl.toFloat()), radius, paint)
         }
-        // meter results: diamonds
-        val half = (if (expanded) 5f else 3.5f) * s
+        // meter results: violet diamonds with a halo, as on the app's chart
+        val half = (if (expanded) 6f else 4f) * s
+        fun diamond(cx: Float, cy: Float, h: Float) = Path().apply { moveTo(cx, cy - h); lineTo(cx + h, cy); lineTo(cx, cy + h); lineTo(cx - h, cy); close() }
         for (f in d.fingersticks) {
             if (f.timestamp < start) continue
             val cx = x(f.timestamp)
             val cy = y(f.mgdl.toFloat().coerceIn(yMin, yMax))
-            val diamond = Path().apply { moveTo(cx, cy - half); lineTo(cx + half, cy); lineTo(cx, cy + half); lineTo(cx - half, cy); close() }
-            paint.color = color(p, f.mgdl, d.low, d.high)
-            c.drawPath(diamond, paint)
+            paint.color = p.halo
+            c.drawPath(diamond(cx, cy, half + 1.5f * s), paint)
+            paint.color = p.meter
+            c.drawPath(diamond(cx, cy, half), paint)
         }
         return bmp
     }

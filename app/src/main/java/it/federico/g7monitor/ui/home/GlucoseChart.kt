@@ -43,7 +43,7 @@ import kotlin.math.abs
 @Composable
 fun GlucoseChart(
     readings: List<GlucoseReading>,
-    /** Meter results: drawn as outlined diamonds with their value. */
+    /** Meter results: violet diamonds with their value; touching one compares it with the sensor. */
     fingersticks: List<Fingerstick> = emptyList(),
     windowHours: Int,
     now: Long,
@@ -57,6 +57,8 @@ fun GlucoseChart(
     val measurer = rememberTextMeasurer()
     val labelStyle = TextStyle(fontSize = 11.sp, color = scheme.onSurfaceVariant)
     val tipStyle = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
+    val tipDetailStyle = TextStyle(fontSize = 12.sp, color = scheme.onSurfaceVariant)
+    val meterLabelStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = scheme.surface)
     val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.ITALY) }
     var touchX by remember { mutableStateOf<Float?>(null) }
 
@@ -153,28 +155,61 @@ fun GlucoseChart(
         val dotR = if (windowHours <= 6) 3.2.dp.toPx() else 2.4.dp.toPx()
         for (r in visible) drawCircle(colorOf(r.mgdl), dotR, Offset(x(r.timestamp), y(r.mgdl.toFloat())))
 
-        // Meter results: diamond with a light outline, value above
-        val half = 6.dp.toPx()
-        for (f in fingersticks) {
-            if (f.timestamp !in start..end) continue
+        // Meter results: a colour of their own (not a range colour, not the trace), a dashed guide
+        // down to the time axis, a halo that cuts through the trace and the value in a filled tag.
+        val half = 8.dp.toPx()
+        val visibleSticks = fingersticks.filter { it.timestamp in start..end }
+        fun diamond(cx: Float, cy: Float, h: Float) = Path().apply {
+            moveTo(cx, cy - h); lineTo(cx + h, cy); lineTo(cx, cy + h); lineTo(cx - h, cy); close()
+        }
+        for (f in visibleSticks) {
             val cx = x(f.timestamp)
             val cy = y(f.mgdl.toFloat().coerceIn(yMin, yMax))
-            val diamond = Path().apply {
-                moveTo(cx, cy - half); lineTo(cx + half, cy); lineTo(cx, cy + half); lineTo(cx - half, cy); close()
-            }
-            drawPath(diamond, colorOf(f.mgdl))
-            drawPath(diamond, scheme.surface, style = Stroke(width = 1.5.dp.toPx()))
-            val m = measurer.measure(Glucose.format(f.mgdl, mmol), labelStyle)
-            drawText(m, topLeft = Offset(cx - m.size.width / 2, (cy - half - m.size.height - 2.dp.toPx()).coerceAtLeast(0f)))
+            drawLine(range.meter.copy(alpha = 0.45f), Offset(cx, cy + half), Offset(cx, topPad + plotH), 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())))
+            drawPath(diamond(cx, cy, half + 2.5.dp.toPx()), scheme.surface)
+            drawPath(diamond(cx, cy, half), range.meter)
+            drawCircle(scheme.surface, 2.dp.toPx(), Offset(cx, cy))
+            val m = measurer.measure(Glucose.format(f.mgdl, mmol), meterLabelStyle)
+            val padX = 5.dp.toPx(); val padY = 2.dp.toPx()
+            val tw = m.size.width + padX * 2; val th = m.size.height + padY * 2
+            val tx0 = (cx - tw / 2).coerceIn(leftPad, size.width - tw)
+            val ty0 = (cy - half - 4.dp.toPx() - th).let { if (it < 0f) cy + half + 4.dp.toPx() else it }
+            drawRoundRect(range.meter, Offset(tx0, ty0), Size(tw, th), CornerRadius(th / 2))
+            drawText(m, topLeft = Offset(tx0 + padX, ty0 + padY))
         }
 
         // "Now" marker
         val nowX = x(now)
         drawLine(scheme.primary.copy(alpha = 0.35f), Offset(nowX, topPad), Offset(nowX, topPad + plotH), 1.5f)
 
-        // Touch inspection
+        // Touch inspection: a meter result close to the finger wins, compared with the sensor.
         val tx = touchX
-        if (tx != null && visible.isNotEmpty()) {
+        val stick = tx?.let { t -> visibleSticks.minByOrNull { abs(x(it.timestamp) - t) }?.takeIf { abs(x(it.timestamp) - t) <= 20.dp.toPx() } }
+        if (stick != null) {
+            val px = x(stick.timestamp); val py = y(stick.mgdl.toFloat().coerceIn(yMin, yMax))
+            drawLine(range.meter.copy(alpha = 0.6f), Offset(px, topPad), Offset(px, topPad + plotH), 1.5f)
+            drawPath(diamond(px, py, half * 1.35f + 2.5.dp.toPx()), scheme.surface)
+            drawPath(diamond(px, py, half * 1.35f), range.meter)
+            val title = measurer.measure(
+                "Glucometro ${Glucose.format(stick.mgdl, mmol)} · ${timeFmt.format(Date(stick.timestamp))}", tipStyle,
+            )
+            val sensor = Glucose.sensorAt(readings, stick.timestamp)
+            val detail = measurer.measure(
+                sensor?.let { "Sensore ${Glucose.format(it, mmol)} · differenza ${Glucose.formatDifference(stick.mgdl, it, mmol)}" }
+                    ?: "Nessuna lettura del sensore in quel momento",
+                tipDetailStyle,
+            )
+            val pad = 8.dp.toPx()
+            val bw = maxOf(title.size.width, detail.size.width) + pad * 2
+            val bh = title.size.height + detail.size.height + pad * 1.5f
+            val bx = (px - bw / 2).coerceIn(leftPad, size.width - bw)
+            val by = (py - half * 1.35f - bh - pad).let { if (it < 0f) py + half * 1.35f + pad else it }
+            drawRoundRect(scheme.surfaceContainerHighest, Offset(bx, by), Size(bw, bh), CornerRadius(8.dp.toPx()))
+            drawRoundRect(range.meter, Offset(bx, by), Size(bw, bh), CornerRadius(8.dp.toPx()), style = Stroke(1.5.dp.toPx()))
+            drawText(title, topLeft = Offset(bx + pad, by + pad / 2))
+            drawText(detail, topLeft = Offset(bx + pad, by + pad / 2 + title.size.height + pad / 2))
+        } else if (tx != null && visible.isNotEmpty()) {
             val nearest = visible.minBy { abs(x(it.timestamp) - tx) }
             val px = x(nearest.timestamp); val py = y(nearest.mgdl.toFloat())
             drawLine(scheme.onSurface.copy(alpha = 0.4f), Offset(px, topPad), Offset(px, topPad + plotH), 1.5f)

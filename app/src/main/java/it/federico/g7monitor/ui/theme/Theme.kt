@@ -18,15 +18,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
-/** Glucose range colours: fixed, independent from the wallpaper-based scheme. */
+/**
+ * Glucose range colours: fixed, independent from the wallpaper-based scheme.
+ * [meter]: blood glucose meter results, a hue none of the ranges use so they stand out on the chart.
+ */
 @Immutable
-data class RangeColors(val low: Color, val inRange: Color, val high: Color, val stale: Color)
+data class RangeColors(val low: Color, val inRange: Color, val high: Color, val stale: Color, val meter: Color)
 
 private val LightRange = RangeColors(
     low = Color(0xFFD93A3F), inRange = Color(0xFF1F9D62), high = Color(0xFFD98A00), stale = Color(0xFF8A9099),
+    meter = Color(0xFF8E44D9),
 )
 private val DarkRange = RangeColors(
     low = Color(0xFFFF6B6F), inRange = Color(0xFF4CD597), high = Color(0xFFFFC145), stale = Color(0xFF6E757E),
+    meter = Color(0xFFC9A2FF),
 )
 
 val LocalRangeColors = staticCompositionLocalOf { LightRange }

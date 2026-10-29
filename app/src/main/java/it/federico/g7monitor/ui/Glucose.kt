@@ -1,11 +1,33 @@
 package it.federico.g7monitor.ui
 
+import it.federico.g7monitor.data.GlucoseReading
 import java.util.Locale
 import kotlin.math.abs
 
 /** Unit conversion and trend helpers shared by UI and notification. */
 object Glucose {
     const val MGDL_PER_MMOL = 18.0182
+
+    /**
+     * What the sensor read at [time], to compare with a meter result: interpolated between the
+     * readings around it (at most 12 minutes apart), or the nearest one within 5 minutes.
+     * @param readings sorted by time
+     */
+    fun sensorAt(readings: List<GlucoseReading>, time: Long): Int? {
+        val i = readings.binarySearchBy(time) { it.timestamp }.let { if (it >= 0) return readings[it].mgdl else -it - 1 }
+        val before = readings.getOrNull(i - 1)
+        val after = readings.getOrNull(i)
+        if (before != null && after != null && after.timestamp - before.timestamp <= 12 * 60_000L) {
+            val f = (time - before.timestamp).toDouble() / (after.timestamp - before.timestamp)
+            return Math.round(before.mgdl + (after.mgdl - before.mgdl) * f).toInt()
+        }
+        return listOfNotNull(before, after).filter { abs(it.timestamp - time) <= 5 * 60_000L }
+            .minByOrNull { abs(it.timestamp - time) }?.mgdl
+    }
+
+    /** "+7 mg/dL" / "−0,4 mmol/L": meter minus sensor. */
+    fun formatDifference(meterMgdl: Int, sensorMgdl: Int, mmol: Boolean) =
+        "${formatDelta(meterMgdl - sensorMgdl, mmol)} ${unit(mmol)}"
 
     fun format(mgdl: Int, mmol: Boolean): String = when {
         mgdl <= 39 -> "LOW"
