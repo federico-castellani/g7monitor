@@ -58,6 +58,8 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
     private var authFor: String? = null
 
     private var consecutiveFailures = 0
+    /** Sessions in a row where the sensor accepted us and then hung up as soon as data was asked. */
+    private var dataDrops = 0
     private val mismatches = HashMap<String, Int>()
     @Volatile private var forceScan = false
     private var lastSuccess = 0L
@@ -141,62 +143,87 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             return null
         }
         setLink(Link.Scanning)
-        // A bonded G7 may stop advertising the Dexcom service UUID, so also match by address.
-        val filters = buildList {
-            add(ScanFilter.Builder().setServiceUuid(ParcelUuid(G7Gatt.ADVERTISEMENT)).build())
-            if (preferredMac != null) add(ScanFilter.Builder().setDeviceAddress(preferredMac).build())
+        // Known sensor: only its address. Other G7s nearby (someone else's, or an old one) are
+        // never touched: connecting to them wastes the sensor's short connection window.
+        // Unknown sensor: the Dexcom service UUID, plus a second, unfiltered scan matched by name,
+        // because a G7 that is already bonded stops advertising the service UUID (Android only
+        // delivers unfiltered results while the screen is on, which is when the user sets it up).
+        val filterSets = if (preferredMac != null) {
+            listOf(listOf(ScanFilter.Builder().setDeviceAddress(preferredMac).build()))
+        } else {
+            listOf(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(G7Gatt.ADVERTISEMENT)).build()), emptyList())
         }
+        // Low latency (radio always listening) only to find a new sensor while setting it up. A known
+        // sensor is normally reached by autoConnect; this scan is the fallback, and it can last
+        // hours when the phone is far from the sensor: balanced listens a fraction of the time and
+        // still catches a G7 advertisement within its connection window.
         val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .setScanMode(if (preferredMac == null) ScanSettings.SCAN_MODE_LOW_LATENCY else ScanSettings.SCAN_MODE_BALANCED)
             .build()
         val blocked = mutableSetOf<String>()
         val ignoredLogged = mutableSetOf<String>()
-        log("scansione avviata (filtro servizio FEBC${preferredMac?.let { ", MAC preferito $it" } ?: ""})")
+        log(preferredMac?.let { "scansione avviata (solo il sensore $it)" } ?: "scansione avviata (servizio FEBC e nome DXCM)")
         DebugLog.scan.value = DebugLog.ScanInfo(active = true, startedAt = System.currentTimeMillis())
         var failed = false
+        val running = mutableListOf<ScanCallback>()
         // Android degrades scans that run for a long time: restart every 10 minutes.
-        val found = withTimeoutOrNull(SCAN_RESTART_MS) {
-            suspendCancellableCoroutine { cont ->
-                val cb = object : ScanCallback() {
-                    override fun onScanResult(type: Int, result: ScanResult) {
-                        val dev = result.device
-                        val name = result.scanRecord?.deviceName ?: dev.name
-                        val info = DebugLog.scan.value
-                        DebugLog.scan.value = info.copy(
-                            filteredResults = info.filteredResults + 1,
-                            lastResultAt = System.currentTimeMillis(),
-                            lastResult = "${name ?: "(senza nome)"} ${dev.address} ${result.rssi} dBm",
-                        )
-                        if (dev.address in blocked) return
-                        val matches = (preferredMac != null && dev.address == preferredMac) || G7Gatt.isG7Name(name)
-                        if (!matches) {
-                            if (ignoredLogged.add(dev.address)) log("ignorato ${name ?: "(senza nome)"} ${dev.address}: non è un G7")
-                            return
+        val found = try {
+            withTimeoutOrNull(SCAN_RESTART_MS) {
+                suspendCancellableCoroutine { cont ->
+                    val cb = object : ScanCallback() {
+                        override fun onScanResult(type: Int, result: ScanResult) {
+                            val dev = result.device
+                            val name = result.scanRecord?.deviceName ?: dev.name
+                            val matches = if (preferredMac != null) dev.address == preferredMac else G7Gatt.isG7Name(name)
+                            if (matches || G7Gatt.isG7Name(name)) {
+                                val info = DebugLog.scan.value
+                                DebugLog.scan.value = info.copy(
+                                    filteredResults = info.filteredResults + 1,
+                                    lastResultAt = System.currentTimeMillis(),
+                                    lastResult = "${name ?: "(senza nome)"} ${dev.address} ${result.rssi} dBm",
+                                )
+                            }
+                            if (dev.address in blocked) return
+                            if (!matches) {
+                                // The unfiltered scan sees every device around: log only other G7s.
+                                if (G7Gatt.isG7Name(name) && ignoredLogged.add(dev.address)) {
+                                    log("ignorato $name ${dev.address}: non è il sensore abbinato")
+                                }
+                                return
+                            }
+                            scope.launch {
+                                if (app.settings.isBlocked(dev.address)) {
+                                    if (blocked.add(dev.address)) log("ignorato $name ${dev.address}: in pausa dopo un errore (riprovo tra qualche minuto)")
+                                    return@launch
+                                }
+                                if (cont.isActive) {
+                                    log("TROVATO $name ${dev.address} rssi=${result.rssi}")
+                                    app.status.value = app.status.value.copy(deviceName = name)
+                                    cont.resume(dev)
+                                }
+                            }
                         }
-                        val callback = this
-                        scope.launch {
-                            if (app.settings.isBlocked(dev.address)) {
-                                if (blocked.add(dev.address)) log("ignorato $name ${dev.address}: in pausa dopo un errore (riprovo tra qualche minuto)")
-                                return@launch
-                            }
-                            if (cont.isActive) {
-                                log("TROVATO $name ${dev.address} rssi=${result.rssi}")
-                                runCatching { scanner.stopScan(callback) }
-                                app.status.value = app.status.value.copy(deviceName = name)
-                                cont.resume(dev)
-                            }
+
+                        override fun onScanFailed(errorCode: Int) {
+                            log("scansione fallita, codice $errorCode${if (errorCode == 6) " (avvii troppo frequenti)" else ""}")
+                            failed = true
+                            if (cont.isActive) cont.resume(null)
                         }
                     }
-
-                    override fun onScanFailed(errorCode: Int) {
-                        log("scansione fallita, codice $errorCode${if (errorCode == 6) " (avvii troppo frequenti)" else ""}")
-                        failed = true
-                        if (cont.isActive) cont.resume(null)
+                    // One callback per scan: Android identifies a scan by its callback.
+                    for (filters in filterSets) {
+                        val one = object : ScanCallback() {
+                            override fun onScanResult(type: Int, result: ScanResult) = cb.onScanResult(type, result)
+                            override fun onScanFailed(errorCode: Int) = cb.onScanFailed(errorCode)
+                        }
+                        running += one
+                        scanner.startScan(filters, settings, one)
                     }
                 }
-                scanner.startScan(filters, settings, cb)
-                cont.invokeOnCancellation { runCatching { scanner.stopScan(cb) } }
             }
+        } finally {
+            // Also when the collector stops while scanning.
+            running.forEach { runCatching { scanner.stopScan(it) } }
         }
         DebugLog.scan.value = DebugLog.scan.value.copy(active = false)
         if (found == null && !failed) log("nessun G7 visto in ${SCAN_RESTART_MS / 60_000} min, riavvio la scansione")
@@ -312,7 +339,10 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                         return flow.gotGlucose
                     }
                 }
-                GattClient.Event.Disconnected -> return flow.gotGlucose
+                GattClient.Event.Disconnected -> {
+                    if (flow.dataStarted && !flow.gotGlucose) onDataRefused(client, mac)
+                    return flow.gotGlucose
+                }
                 is GattClient.Event.Notification -> when (ev.uuid) {
                     G7Gatt.EXTRA_DATA -> auth.onExtraData(ev.value)?.let {
                         if (!execute(client, auth, it, flow, mac)) return false
@@ -326,6 +356,50 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             }
         }
         return flow.gotGlucose
+    }
+
+    /**
+     * The sensor authenticated us and then hung up (status 19) as soon as data was requested,
+     * without sending any. Seen after the phone was out of range for a while: the sensor's pairing
+     * with this phone is no longer valid for data, J-PAKE runs again at every connection (about
+     * once a minute) and never completes. A second time in a row: drop the Android bond and the
+     * saved key, so the next connection pairs and bonds from scratch (xDrip resets the bond too).
+     */
+    private suspend fun onDataRefused(client: GattClient, mac: String) {
+        if (client.disconnectStatus != SENSOR_HUNG_UP) return // out of range, not a refusal
+        dataDrops++
+        log("il sensore ha chiuso la connessione dopo la richiesta dei dati ($dataDrops di fila)")
+        if (dataDrops < 2) return
+        dataDrops = 0
+        log("ripristino l'abbinamento con il sensore: rimuovo il legame Bluetooth e la chiave")
+        setLink(Link.Error, "Il sensore rifiuta i dati: rifaccio l'abbinamento")
+        runCatching { BondHelper.removeBond(client.device) }
+        app.settings.setAuthKey(mac, null)
+        auth?.forgetKey()
+    }
+
+    /**
+     * Creates the Android bond while connected. The sensor asks for it after the first pairing;
+     * we also do it when the sensor still counts this phone as bonded but Android has no bond
+     * any more (removed in the Bluetooth settings, or lost): without it the link is not
+     * encrypted and the sensor hangs up as soon as data is requested.
+     */
+    private suspend fun bond(client: GattClient, auth: G7Auth, mac: String): Boolean {
+        setLink(Link.Bonding, "Conferma l'abbinamento se Android lo chiede")
+        auth.sharedKey()?.let { app.settings.setAuthKey(mac, it.toHex()) }
+        val bonded = BondHelper.createBond(context, client.device)
+        log(if (bonded) "abbinamento Bluetooth completato" else "abbinamento Bluetooth NON riuscito")
+        if (!bonded) return false
+        auth.locallyBonded = true
+        // Remember the sensor now: from here on we reconnect to it directly instead of scanning.
+        rememberSensor(mac)
+        // Give the link a moment to switch to encryption before asking for data.
+        delay(1_500)
+        if (!client.isConnected) {
+            log("il sensore ha chiuso la connessione dopo l'abbinamento: riprovo al prossimo ciclo")
+            return false
+        }
+        return true
     }
 
     /** @return false when the session should end. */
@@ -345,27 +419,16 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                 return true
             }
             AuthAction.ReadyForData -> {
-                log("autenticato e abbinato")
+                val androidBond = BondHelper.isBonded(client.device)
+                log("autenticato e abbinato (legame Bluetooth di Android: ${if (androidBond) "presente" else "assente"})")
                 mismatches.remove(mac)
                 auth.sharedKey()?.let { app.settings.setAuthKey(mac, it.toHex()) }
                 rememberSensor(mac)
+                if (!androidBond && !bond(client, auth, mac)) return false
                 return startData(client, flow)
             }
             AuthAction.CreateBond -> {
-                setLink(Link.Bonding, "Conferma l'abbinamento se Android lo chiede")
-                auth.sharedKey()?.let { app.settings.setAuthKey(mac, it.toHex()) }
-                val bonded = BondHelper.createBond(context, client.device)
-                log(if (bonded) "abbinamento Bluetooth completato" else "abbinamento Bluetooth NON riuscito")
-                if (!bonded) return false
-                auth.locallyBonded = true
-                // Remember the sensor now: from here on we reconnect to it directly instead of scanning.
-                rememberSensor(mac)
-                // Give the link a moment to switch to encryption before asking for data.
-                delay(1_500)
-                if (!client.isConnected) {
-                    log("il sensore ha chiuso la connessione dopo l'abbinamento: riprovo al prossimo ciclo")
-                    return false
-                }
+                if (!bond(client, auth, mac)) return false
                 return startData(client, flow)
             }
             AuthAction.BondFailure -> {
@@ -417,6 +480,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             log("control rx ${value.toHex()}")
             return
         }
+        dataDrops = 0
         log("glicemia ${g.glucoseMgdl} mg/dL, stato ${g.adjustedState.label}, età ${g.ageSeconds}s")
         val now = System.currentTimeMillis()
         val state = g.adjustedState
@@ -473,6 +537,8 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
 
     companion object {
         private const val TAG = "G7Collector"
+        /** GATT status when the remote side closes the link (HCI "remote user terminated"). */
+        private const val SENSOR_HUNG_UP = 19
         const val PERIOD_MS = 5 * 60_000L
         const val SCAN_RESTART_MS = 10 * 60_000L
         const val MAX_BACKFILL_MS = 24 * 60 * 60_000L

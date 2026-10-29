@@ -5,6 +5,7 @@ import android.net.NetworkCapabilities
 import it.federico.g7monitor.G7App
 import it.federico.g7monitor.data.DataSource
 import it.federico.g7monitor.data.DebugLog
+import it.federico.g7monitor.data.Fingerstick
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -83,15 +84,37 @@ class Uploader(private val app: G7App) {
             try {
                 ServerApi.uploadFingersticks(url, token, batch)
             } catch (e: ServerApi.HttpError) {
-                if (e.status != 404) throw e
-                if (!oldServerLogged) DebugLog.log("server: non conosce ancora le misurazioni del glucometro, aggiornalo")
-                oldServerLogged = true
-                return sent
+                when (e.status) {
+                    404 -> {
+                        if (!oldServerLogged) DebugLog.log("server: non conosce ancora le misurazioni del glucometro, aggiornalo")
+                        oldServerLogged = true
+                        return sent
+                    }
+                    // A result the server refuses (e.g. a meter clock far off) must not hold back the others.
+                    400 -> return sent + uploadOneByOne(url, token, batch)
+                    else -> throw e
+                }
             }
             app.readings.markFingersticksUploaded(batch)
             sent += batch.size
             if (batch.size < 500) return sent
         }
+    }
+
+    /** After a refused batch: sends each result alone, and drops the ones the server refuses. */
+    private suspend fun uploadOneByOne(url: String, token: String, batch: List<Fingerstick>): Int {
+        var sent = 0
+        for (f in batch) {
+            try {
+                ServerApi.uploadFingersticks(url, token, listOf(f))
+                sent++
+            } catch (e: ServerApi.HttpError) {
+                if (e.status != 400) throw e
+                DebugLog.log("server: misurazione del glucometro rifiutata (${f.mgdl} mg/dL, ${e.message}): non la invio più")
+            }
+            app.readings.markFingersticksUploaded(listOf(f))
+        }
+        return sent
     }
 
     private var oldServerLogged = false

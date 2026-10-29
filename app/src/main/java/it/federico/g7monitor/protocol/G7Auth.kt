@@ -199,6 +199,7 @@ class G7Auth(
                 val authenticated = data.size >= 3 && data[0].toInt() == 0x05 && data[1].toInt() == 1
                 val bondedByte = if (data.size >= 3 && data[0].toInt() == 0x05) data[2].toInt() else 0
                 val bonded = bondedByte == 1
+                log("sensore: autenticato=${if (authenticated) "sì" else "no"}, abbinato=$bondedByte, chiave ${if (usedSavedKey) "salvata" else "nuova (J-PAKE)"}")
                 if (bondedByte == 3) reset()
                 if (!authenticated) {
                     log("auth: could not authenticate")
@@ -298,8 +299,16 @@ class G7Auth(
 
     private fun currentKey(): ByteArray? = savedKey ?: jpake.sharedKey()
 
+    /** Whether this connection authenticated with the key saved from an earlier J-PAKE. */
+    private var usedSavedKey = false
+
     private fun verifyChallenge(data: ByteArray): Boolean {
-        if (savedKey != null) return true
+        if (savedKey != null) {
+            // Not enforced (same as xDrip), but tells whether the sensor still has our key.
+            val h = if (data.size >= 17) JPake.challengeHash(savedKey!!, lastToken) else null
+            if (h != null && (0 until 8).any { h[it] != data[it + 1] }) log("auth: il sensore non usa più la chiave salvata")
+            return true
+        }
         if (data.size < 17) return false
         val h = JPake.challengeHash(currentKey() ?: return false, lastToken) ?: return false
         for (i in 0 until 8) if (h[i] != data[i + 1]) return false
@@ -311,9 +320,11 @@ class G7Auth(
         log("auth next in $state")
         return when (state) {
             State.RoundStart -> if (jpake.peerPackets[3] != null || savedKey != null) {
+                usedSavedKey = savedKey != null
                 state = State.RequestAuth
                 AuthAction.Write(authRequest(), null)
             } else {
+                usedSavedKey = false
                 state = State.Round1
                 sequencePacket(null)
             }

@@ -46,6 +46,9 @@ class GattClient(
     @Volatile private var discovered: CompletableDeferred<Boolean>? = null
     @Volatile var isConnected = false
         private set
+    /** GATT status of the last disconnection: 19 = the sensor hung up, 8 = link lost (out of range). */
+    @Volatile var disconnectStatus = -1
+        private set
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
@@ -55,6 +58,7 @@ class GattClient(
                 connected?.complete(true)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 isConnected = false
+                disconnectStatus = status
                 connected?.complete(false)
                 discovered?.complete(false)
                 pendingOp?.complete(-1)
