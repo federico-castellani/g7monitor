@@ -111,19 +111,20 @@ class SettingsRepository(private val context: Context) {
         collectorEnabled = this[K.enabled] ?: false,
         sensorMac = this[K.mac],
         sessionStart = this[K.session],
-        certP1 = this[K.p1] ?: "",
-        certP2 = this[K.p2] ?: "",
-        certP3 = this[K.p3] ?: "",
+        // Secrets are stored encrypted (SecretBox).
+        certP1 = SecretBox.open(this[K.p1]),
+        certP2 = SecretBox.open(this[K.p2]),
+        certP3 = SecretBox.open(this[K.p3]),
         serverUrl = this[K.serverUrl] ?: "",
         serverUser = this[K.serverUser] ?: "",
-        serverToken = this[K.serverToken] ?: "",
+        serverToken = SecretBox.open(this[K.serverToken]),
         uploadIntervalMin = this[K.uploadInterval] ?: 5,
         uploadWifiOnly = this[K.wifiOnly] ?: false,
         lastUploadAt = this[K.lastUpload],
         uploadError = this[K.uploadError],
         followUrl = this[K.followUrl] ?: "",
         followUser = this[K.followUser] ?: "",
-        followToken = this[K.followToken] ?: "",
+        followToken = SecretBox.open(this[K.followToken]),
         lastFollowAt = this[K.lastFollow],
         followError = this[K.followError],
         meterMac = this[K.meterMac],
@@ -156,7 +157,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setFollow(url: String, user: String, token: String) = context.dataStore.edit {
         it[K.followUrl] = url
         it[K.followUser] = user
-        it[K.followToken] = token
+        it[K.followToken] = SecretBox.seal(token)
         it.remove(K.lastFollow)
         it.remove(K.followError)
     }
@@ -188,13 +189,13 @@ class SettingsRepository(private val context: Context) {
     suspend fun setSensorMac(mac: String?) = context.dataStore.edit { if (mac == null) it.remove(K.mac) else it[K.mac] = mac }
     suspend fun setSessionStart(t: Long?) = context.dataStore.edit { if (t == null) it.remove(K.session) else it[K.session] = t }
     suspend fun setCertificates(p1: String, p2: String, p3: String) = context.dataStore.edit {
-        it[K.p1] = p1.trim(); it[K.p2] = p2.trim(); it[K.p3] = p3.trim()
+        it[K.p1] = SecretBox.seal(p1.trim()); it[K.p2] = SecretBox.seal(p2.trim()); it[K.p3] = SecretBox.seal(p3.trim())
     }
 
     suspend fun setServer(url: String, user: String, token: String) = context.dataStore.edit {
         it[K.serverUrl] = url
         it[K.serverUser] = user
-        it[K.serverToken] = token
+        it[K.serverToken] = SecretBox.seal(token)
         it.remove(K.lastUpload)
         it.remove(K.uploadError)
     }
@@ -215,9 +216,21 @@ class SettingsRepository(private val context: Context) {
         if (error == null) it.remove(K.uploadError) else it[K.uploadError] = error
     }
 
-    suspend fun authKey(mac: String): String? = context.dataStore.data.first()[K.key(mac)]
+    suspend fun authKey(mac: String): String? =
+        context.dataStore.data.first()[K.key(mac)]?.let { SecretBox.open(it) }?.ifEmpty { null }
+
     suspend fun setAuthKey(mac: String, hex: String?) = context.dataStore.edit {
-        if (hex == null) it.remove(K.key(mac)) else it[K.key(mac)] = hex
+        if (hex == null) it.remove(K.key(mac)) else it[K.key(mac)] = SecretBox.seal(hex)
+    }
+
+    /** Secrets written in plain text by older versions: encrypted once, at start. */
+    suspend fun encryptOldSecrets() = context.dataStore.edit { prefs ->
+        val secrets = listOf(K.serverToken, K.followToken, K.p1, K.p2, K.p3) +
+            prefs.asMap().keys.filter { it.name.startsWith("key_") }.map { stringPreferencesKey(it.name) }
+        for (key in secrets) {
+            val v = prefs[key] ?: continue
+            if (v.isNotEmpty() && !SecretBox.isSealed(v)) prefs[key] = SecretBox.seal(v)
+        }
     }
 
     /** Devices that failed authentication are ignored for a while (old sensors nearby). */

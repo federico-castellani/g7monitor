@@ -182,7 +182,14 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
                         trailing = {
                             IconButton(onClick = {
                                 context.getSystemService(ClipboardManager::class.java)
-                                    .setPrimaryClip(ClipData.newPlainText("G7 log", DebugLog.asText()))
+                                    .setPrimaryClip(
+                                        ClipData.newPlainText("G7 log", DebugLog.asText()).apply {
+                                            // Health data: Android hides it from the clipboard preview.
+                                            description.extras = android.os.PersistableBundle().apply {
+                                                putBoolean("android.content.extra.IS_SENSITIVE", true)
+                                            }
+                                        },
+                                    )
                                 Toast.makeText(context, "Registro copiato", Toast.LENGTH_SHORT).show()
                             }) { Icon(Icons.Outlined.ContentCopy, "Copia registro") }
                             IconButton(onClick = { DebugLog.clear() }) { Icon(Icons.Outlined.DeleteOutline, "Pulisci registro") }

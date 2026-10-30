@@ -61,6 +61,7 @@ class G7App : Application() {
         alarmSettings = AlarmRepository(this)
         alarms = AlarmEngine(this)
         watch = WatchSync(this)
+        scope.launch { runCatching { settings.encryptOldSecrets() } }
         updater = AppUpdater(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
