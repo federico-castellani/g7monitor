@@ -387,6 +387,10 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
     private suspend fun bond(client: GattClient, auth: G7Auth, mac: String): Boolean {
         setLink(Link.Bonding, "Conferma l'abbinamento se Android lo chiede")
         auth.sharedKey()?.let { app.settings.setAuthKey(mac, it.toHex()) }
+        // As xDrip before bonding: ask the sensor to keep the link open 60 s. The 25 s asked during
+        // authentication often run out while Android's pairing request waits for the user, and then
+        // the reading (and the backfill) only came at the next cycle, minutes later.
+        if (!BondHelper.isBonded(client.device)) client.write(G7Gatt.AUTHENTICATION, KEEP_ALIVE_FOR_BONDING)
         val bonded = BondHelper.createBond(context, client.device)
         log(if (bonded) "abbinamento Bluetooth completato" else "abbinamento Bluetooth NON riuscito")
         if (!bonded) return false
@@ -428,6 +432,8 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                 return startData(client, flow)
             }
             AuthAction.CreateBond -> {
+                // The sensor's answer to our keep-alive looks like a bond request: already done.
+                if (flow.dataStarted) return true
                 if (!bond(client, auth, mac)) return false
                 return startData(client, flow)
             }
@@ -539,6 +545,8 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         private const val TAG = "G7Collector"
         /** GATT status when the remote side closes the link (HCI "remote user terminated"). */
         private const val SENSOR_HUNG_UP = 19
+        /** Keep-alive request: 0x06, then how many seconds the sensor keeps the link open (xDrip KeepAliveTxMessage(60)). */
+        private val KEEP_ALIVE_FOR_BONDING = byteArrayOf(0x06, 60)
         const val PERIOD_MS = 5 * 60_000L
         const val SCAN_RESTART_MS = 10 * 60_000L
         const val MAX_BACKFILL_MS = 24 * 60 * 60_000L

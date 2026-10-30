@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -97,12 +98,19 @@ fun SettingRow(
     }
 }
 
-/** Label/value line for compact technical info (Diagnostics). */
+/**
+ * Label/value line for compact technical info (Diagnostics). The label keeps its width and a long
+ * value wraps on the right (the other way round, a long value squeezed the label to one letter per line).
+ */
 @Composable
 fun InfoLine(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
     Row(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = valueColor)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = valueColor,
+            textAlign = TextAlign.End, modifier = Modifier.weight(1f),
+        )
     }
 }
 
