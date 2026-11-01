@@ -32,7 +32,8 @@ class Uploader(private val app: G7App) {
 
     private suspend fun run(force: Boolean) {
         val s = app.settings.current()
-        if (s.dataSource != DataSource.Sensor || !s.serverConnected) return
+        // Paused by the user: nothing leaves the phone, not even with "Invia ora".
+        if (s.dataSource != DataSource.Sensor || !s.serverConnected || s.uploadPaused) return
         val now = System.currentTimeMillis()
         // A meter result is rare and wanted at once: it skips the upload interval.
         val urgent = !oldServerLogged && app.readings.pendingFingersticks(1).isNotEmpty()

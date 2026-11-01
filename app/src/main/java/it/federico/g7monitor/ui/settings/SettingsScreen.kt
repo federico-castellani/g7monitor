@@ -183,12 +183,14 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
             MenuRow(
                 Icons.Outlined.Cloud, if (follow) "Server (ricezione)" else "Server (caricamento)",
                 when {
+                    !follow && connected && settings.uploadPaused -> "Invio in pausa · collegato come ${settings.serverUser}"
                     error != null -> error
                     connected -> "Collegato come ${if (follow) settings.followUser else settings.serverUser}"
                     follow -> "Da configurare"
                     else -> "Facoltativo · non configurato"
                 },
                 when {
+                    !follow && connected && settings.uploadPaused -> null
                     error != null || (follow && !connected) -> warn
                     connected -> ok
                     else -> null

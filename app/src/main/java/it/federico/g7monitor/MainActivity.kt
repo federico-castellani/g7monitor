@@ -374,6 +374,7 @@ class MainActivity : ComponentActivity() {
                                     onUploadInterval = vm::setUploadInterval,
                                     onUploadWifiOnly = vm::setUploadWifiOnly,
                                     onBackground = enableCollector,
+                                    onUploadPaused = vm::setUploadPaused,
                                 ),
                                 onBack = back,
                             )

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Wifi
@@ -295,6 +296,8 @@ class ServerStatusActions(
     val onUploadInterval: (Int) -> Unit,
     val onUploadWifiOnly: (Boolean) -> Unit,
     val onBackground: (Boolean) -> Unit,
+    /** Pauses or resumes the upload without unlinking the server. */
+    val onUploadPaused: (Boolean) -> Unit = {},
 )
 
 @Composable
@@ -306,12 +309,18 @@ fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: S
     val user = if (follow) settings.followUser else settings.serverUser
     val last = if (follow) settings.lastFollowAt else settings.lastUploadAt
     val error = if (follow) settings.followError else settings.uploadError
+    val paused = !follow && settings.uploadPaused
 
     Page(purpose.title(), onBack) {
         SectionCard("Collegamento", Icons.Outlined.CloudDone) {
             SettingRow(Icons.Outlined.Dns, url.removePrefix("https://"), "Server G7 Monitor")
             SettingRow(Icons.Outlined.Person, user, if (follow) "Account (ricezione)" else "Account (caricamento)")
-            if (error != null) {
+            if (paused) {
+                SettingRow(
+                    Icons.Outlined.PauseCircle, "Invio in pausa",
+                    "Il collegamento resta salvato: riattivalo qui sotto quando vuoi",
+                )
+            } else if (error != null) {
                 SettingRow(Icons.Outlined.ErrorOutline, error, null, iconTint = MaterialTheme.colorScheme.error)
             } else {
                 SettingRow(
@@ -321,7 +330,7 @@ fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: S
                     null, iconTint = LocalRangeColors.current.inRange,
                 )
             }
-            FilledTonalButton(onClick = actions.onNow) { Text(if (follow) "Aggiorna ora" else "Invia ora") }
+            FilledTonalButton(onClick = actions.onNow, enabled = !paused) { Text(if (follow) "Aggiorna ora" else "Invia ora") }
         }
 
         if (follow) {
@@ -339,6 +348,14 @@ fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: S
             }
         } else {
             SectionCard("Invio", Icons.Outlined.CloudUpload) {
+                SettingRow(
+                    if (paused) Icons.Outlined.PauseCircle else Icons.Outlined.CloudUpload,
+                    "Invio al server",
+                    if (paused) "In pausa: le letture restano sul telefono e partono tutte quando lo riattivi"
+                    else "Attivo: le letture vanno al server",
+                    trailing = { Switch(checked = !paused, onCheckedChange = { on -> actions.onUploadPaused(!on) }) },
+                )
+                HorizontalDivider()
                 Text("Frequenza di invio", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 val intervals = listOf(5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 ora")
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {

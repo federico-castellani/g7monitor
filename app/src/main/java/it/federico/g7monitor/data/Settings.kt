@@ -43,6 +43,8 @@ data class AppSettings(
     /** Minimum minutes between uploads; 5 = every reading. */
     val uploadIntervalMin: Int = 5,
     val uploadWifiOnly: Boolean = false,
+    /** Upload paused by the user: the server link stays, readings wait on the phone. */
+    val uploadPaused: Boolean = false,
     val lastUploadAt: Long? = null,
     val uploadError: String? = null,
     /** Follower mode: server to download from, account and read-only token. */
@@ -80,6 +82,7 @@ class SettingsRepository(private val context: Context) {
         val serverToken = stringPreferencesKey("server_token")
         val uploadInterval = intPreferencesKey("upload_interval_min")
         val wifiOnly = booleanPreferencesKey("upload_wifi_only")
+        val uploadPaused = booleanPreferencesKey("upload_paused")
         val lastUpload = longPreferencesKey("last_upload_at")
         val uploadError = stringPreferencesKey("upload_error")
         val source = stringPreferencesKey("data_source")
@@ -120,6 +123,7 @@ class SettingsRepository(private val context: Context) {
         serverToken = SecretBox.open(this[K.serverToken]),
         uploadIntervalMin = this[K.uploadInterval] ?: 5,
         uploadWifiOnly = this[K.wifiOnly] ?: false,
+        uploadPaused = this[K.uploadPaused] ?: false,
         lastUploadAt = this[K.lastUpload],
         uploadError = this[K.uploadError],
         followUrl = this[K.followUrl] ?: "",
@@ -209,6 +213,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setUploadInterval(minutes: Int) = context.dataStore.edit { it[K.uploadInterval] = minutes }
     suspend fun setUploadWifiOnly(v: Boolean) = context.dataStore.edit { it[K.wifiOnly] = v }
+    suspend fun setUploadPaused(v: Boolean) = context.dataStore.edit { it[K.uploadPaused] = v }
 
     /** Written only when something changes, to keep DataStore writes rare. */
     suspend fun setUploadResult(at: Long?, error: String?) = context.dataStore.edit {

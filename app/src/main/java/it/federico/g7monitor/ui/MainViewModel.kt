@@ -292,6 +292,13 @@ class MainViewModel : ViewModel() {
     }
 
     fun uploadNow() = viewModelScope.launch { app.uploader.maybeUpload(force = true) }
+
+    /** Pausing keeps the server link; resuming sends at once what was collected meanwhile. */
+    fun setUploadPaused(paused: Boolean) = viewModelScope.launch {
+        app.settings.setUploadPaused(paused)
+        DebugLog.log(if (paused) "server: invio in pausa" else "server: invio riattivato")
+        if (!paused) app.uploader.maybeUpload(force = true)
+    }
     fun setUploadInterval(minutes: Int) = viewModelScope.launch { app.settings.setUploadInterval(minutes) }
     fun setUploadWifiOnly(v: Boolean) = viewModelScope.launch {
         app.settings.setUploadWifiOnly(v)
