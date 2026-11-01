@@ -97,7 +97,7 @@ Il modulo `wear` è un'app per l'orologio, come GlucoDataHandler: riceve la glic
 
 | Complicazione | Tipi | Mostra |
 |---|---|---|
-| **Glicemia** | testo breve, testo lungo, indicatore | `123↗` con i minuti dall'ultima lettura; `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
+| **Glicemia** | testo breve, testo lungo, indicatore | `123` grande, sotto la freccia e i minuti dall'ultima lettura (`↗ 3m`); `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
 | **Glicemia: variazione** | testo breve | `+4` rispetto alla lettura precedente |
 | **Glicemia: ultima lettura** | testo breve | minuti dall'ultima lettura |
 
@@ -109,16 +109,18 @@ Batteria:
 Toccando una complicazione si apre la schermata della glicemia sull'orologio.
 
 ### Installazione sull'orologio (Galaxy Watch 4 o successivo, Wear OS 3+)
-Telefono e orologio devono avere app con lo stesso nome di pacchetto e **la stessa firma**: usa i due APK della stessa [Release](https://github.com/federico-castellani/g7monitor/releases/latest) (`G7Monitor-X.Y.Z.apk` sul telefono, `G7Monitor-Wear-X.Y.Z.apk` sull'orologio), oppure compilali entrambi dallo stesso PC.
+Serve un computer **solo la prima volta**: dopo, l'app dell'orologio si aggiorna da sola. Nell'app del telefono, *Impostazioni → Orologio* mostra se l'orologio ha G7 Monitor e se è aggiornato.
 
-1. Sull'orologio: *Impostazioni → Info sull'orologio → Informazioni sul software*, tocca 5 volte *Versione software*. Poi *Opzioni sviluppatore → Debug ADB* e *Debug wireless*.
-2. Dal PC, sulla stessa rete Wi-Fi, usa i dati mostrati dall'orologio in *Debug wireless*:
-   ```
-   adb pair IP:PORTA_ABBINAMENTO      (codice mostrato sull'orologio)
-   adb connect IP:PORTA
-   adb -s IP:PORTA install G7Monitor-Wear-X.Y.Z.apk      (oppure wear/build/outputs/apk/release/wear-release.apk)
-   ```
-3. Sul quadrante: tieni premuto → *Personalizza* → tocca una complicazione → *G7 Monitor* → scegli *Glicemia*, *Glicemia: variazione* o *Glicemia: ultima lettura*.
+1. Sull'orologio: *Impostazioni → Info sull'orologio → Informazioni sul software*, tocca 5 volte *Versione software*. Poi *Opzioni sviluppatore*: attiva *Debug ADB* e *Debug wireless* (orologio e computer sulla stessa rete Wi-Fi) e tocca *Abbina nuovo dispositivo*.
+2. Sul computer scarica ed esegui lo script, che trova o scarica `adb`, scarica l'ultima versione per l'orologio e la installa chiedendoti solo indirizzo e codice mostrati dall'orologio:
+   - Windows: [`tools/installa-orologio.ps1`](tools/installa-orologio.ps1), poi `powershell -ExecutionPolicy Bypass -File .\installa-orologio.ps1`
+   - Mac/Linux: [`tools/installa-orologio.sh`](tools/installa-orologio.sh), poi `sh installa-orologio.sh`
+3. Apri G7 Monitor sull'orologio e consenti le notifiche. Puoi spegnere il *Debug wireless*.
+4. Sul quadrante: tieni premuto → *Personalizza* → tocca una complicazione → *G7 Monitor* → scegli *Glicemia*, *Glicemia: variazione* o *Glicemia: ultima lettura*.
+
+**Aggiornamenti:** quando l'app del telefono si aggiorna, sull'orologio compare una notifica; toccala e conferma. L'orologio scarica `G7Monitor-Wear-X.Y.Z.apk` dalla stessa [Release](https://github.com/federico-castellani/g7monitor/releases/latest) e lo installa con il programma di installazione di Android. Anche aprendo l'app sull'orologio, se c'è una versione nuova compare il pulsante *Aggiorna*.
+
+Telefono e orologio devono avere la **stessa firma**: usa gli APK delle Release, oppure compilali entrambi dallo stesso PC.
 
 I dati arrivano alla prossima lettura, oppure subito se apri G7 Monitor sull'orologio.
 

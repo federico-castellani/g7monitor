@@ -65,8 +65,10 @@ class GlucoseComplicationService : GlucoseSource() {
         val arrow = if (stale) "" else g.arrow
         val description = text(if (stale) "Glicemia non aggiornata" else "Glicemia ${g.value} ${g.unit} ${g.arrow}")
         return when (type) {
-            ComplicationType.SHORT_TEXT -> ShortTextComplicationData.Builder(text(value + arrow), description)
-                .setTitle(ago(g))
+            // Only the number as text: watch faces shrink a longer text ("123↗") to fit, and the glucose
+            // came out smaller than the 2-character change. The arrow goes in the small line, with the minutes.
+            ComplicationType.SHORT_TEXT -> ShortTextComplicationData.Builder(text(value), description)
+                .setTitle(ago(g, if (arrow.isEmpty()) "^1" else "$arrow ^1"))
                 .setTapAction(tap)
                 .build()
             ComplicationType.LONG_TEXT -> {

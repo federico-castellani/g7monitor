@@ -15,6 +15,10 @@ object WatchContract {
     const val MMOL = "mmol"
     const val LOW = "low"
     const val HIGH = "high"
+    /** Message from the phone with its version name (after an update of the phone app). */
+    const val PHONE_VERSION = "/g7monitor/phone-version"
+    /** Data item with this watch app's version, read by the phone. */
+    const val WATCH_INFO = "/g7monitor/watch"
 }
 
 /** Latest reading received from the phone. */

@@ -62,6 +62,8 @@ class G7App : Application() {
         alarms = AlarmEngine(this)
         watch = WatchSync(this)
         scope.launch { runCatching { settings.encryptOldSecrets() } }
+        // After an update of the phone app, the watch offers its own (one tap, no PC).
+        scope.launch { watch.announceVersion() }
         updater = AppUpdater(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(

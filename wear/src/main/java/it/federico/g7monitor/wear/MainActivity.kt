@@ -1,6 +1,9 @@
 package it.federico.g7monitor.wear
 
+import android.Manifest
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,6 +34,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.compose.runtime.collectAsState
+import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +54,43 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Data the phone sent before this app was installed or opened.
         lifecycleScope.launch(Dispatchers.IO) { DataLayerListenerService.fetchLatest(this@MainActivity) }
-        setContent { MaterialTheme { GlucoseScreen() } }
+        // Our version, for the phone's "Orologio" page.
+        DataLayerListenerService.publishVersion(this)
+        // Wear OS 4+: notifications (the "update available" one) need the user's consent.
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+        val fromNotification = intent.getBooleanExtra(WatchUpdater.EXTRA_UPDATE, false)
+        if (fromNotification) WatchUpdater.cancelNotification(this)
+        lifecycleScope.launch { WatchUpdater.check(this@MainActivity, force = fromNotification) }
+        setContent {
+            MaterialTheme {
+                Box(Modifier.fillMaxSize()) {
+                    GlucoseScreen()
+                    UpdateChip(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)) { release ->
+                        lifecycleScope.launch { WatchUpdater.install(this@MainActivity, release) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Shown only when there is something to say about an update: new version, download, error. */
+@Composable
+private fun UpdateChip(modifier: Modifier, onInstall: (WatchUpdater.Release) -> Unit) {
+    val state by WatchUpdater.state.collectAsState()
+    when (val s = state) {
+        is WatchUpdater.State.Available -> CompactChip(
+            onClick = { onInstall(s.release) },
+            label = { Text("Aggiorna a ${s.release.version}", fontSize = 12.sp) },
+            colors = ChipDefaults.primaryChipColors(),
+            modifier = modifier,
+        )
+        is WatchUpdater.State.Downloading -> Text("Download ${(s.progress * 100).toInt()}%", fontSize = 12.sp, color = STALE, modifier = modifier)
+        is WatchUpdater.State.Installing -> Text("Conferma l'installazione", fontSize = 12.sp, color = STALE, modifier = modifier)
+        is WatchUpdater.State.Failed -> Text(s.message, fontSize = 11.sp, color = LOW, textAlign = TextAlign.Center, modifier = modifier.padding(horizontal = 24.dp))
+        else -> Unit
     }
 }
 

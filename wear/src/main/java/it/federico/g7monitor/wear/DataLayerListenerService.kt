@@ -5,6 +5,8 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import it.federico.g7monitor.wear.complication.Complications
@@ -19,7 +21,24 @@ class DataLayerListenerService : WearableListenerService() {
         Complications.refresh(this)
     }
 
+    /** The phone says its version: tell the phone ours (for its "Orologio" page) and offer the update. */
+    override fun onMessageReceived(event: MessageEvent) {
+        if (event.path != WatchContract.PHONE_VERSION) return
+        publishVersion(this)
+        WatchUpdater.notifyPhoneVersion(this, String(event.data, Charsets.UTF_8))
+    }
+
     companion object {
+        /** This app's version, as a data item the phone reads to show whether the watch is up to date. */
+        fun publishVersion(context: Context) {
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            val request = PutDataMapRequest.create(WatchContract.WATCH_INFO).apply {
+                dataMap.putString("version", info.versionName ?: "")
+                dataMap.putLong("code", info.longVersionCode)
+            }.asPutDataRequest()
+            Wearable.getDataClient(context).putDataItem(request)
+        }
+
         /**
          * Reads the last item the phone already sent (e.g. right after installing the watch app,
          * before the next reading). Blocking: call off the main thread.
