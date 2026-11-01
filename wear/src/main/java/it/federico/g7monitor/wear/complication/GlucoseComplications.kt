@@ -67,8 +67,9 @@ class GlucoseComplicationService : GlucoseSource() {
         return when (type) {
             // Only the number as text: watch faces shrink a longer text ("123↗") to fit, and the glucose
             // came out smaller than the 2-character change. The arrow goes in the small line, with the minutes.
+            // The arrow alone in the small line reads clearly; the minutes are on the "variazione" complication.
             ComplicationType.SHORT_TEXT -> ShortTextComplicationData.Builder(text(value), description)
-                .setTitle(ago(g, if (arrow.isEmpty()) "^1" else "$arrow ^1"))
+                .apply { if (arrow.isNotEmpty()) setTitle(text(arrow)) }
                 .setTapAction(tap)
                 .build()
             ComplicationType.LONG_TEXT -> {
@@ -95,13 +96,13 @@ class GlucoseComplicationService : GlucoseSource() {
     }
 }
 
-/** "+4" with the unit: change from the previous reading. */
+/** "+4" with the minutes since the reading below: change from the previous reading, and how fresh it is. */
 class DeltaComplicationService : GlucoseSource() {
     override fun build(type: ComplicationType, g: WatchGlucose, stale: Boolean, tap: PendingIntent?): ComplicationData? {
         if (type != ComplicationType.SHORT_TEXT) return null
         val delta = if (stale) null else g.deltaText
         return ShortTextComplicationData.Builder(text(delta ?: "--"), text(delta?.let { "Variazione $it ${g.unit}" } ?: "Variazione non disponibile"))
-            .setTitle(text(if (g.mmol) "mmol" else "mg/dL"))
+            .setTitle(ago(g))
             .setTapAction(tap)
             .build()
     }

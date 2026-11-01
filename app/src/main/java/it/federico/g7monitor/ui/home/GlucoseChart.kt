@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -51,6 +53,12 @@ fun GlucoseChart(
     highMgdl: Int,
     mmol: Boolean,
     modifier: Modifier = Modifier,
+    /** 0 straight segments, 1 soft curve through the readings, 2 curve through a moving average. */
+    smoothing: Int = 0,
+    /** A coloured dot for every reading. Without them the line itself is drawn stronger. */
+    showDots: Boolean = true,
+    showFingersticks: Boolean = true,
+    height: Dp = 260.dp,
 ) {
     val range = LocalRangeColors.current
     val scheme = MaterialTheme.colorScheme
@@ -65,7 +73,7 @@ fun GlucoseChart(
     Canvas(
         modifier
             .fillMaxWidth()
-            .height(260.dp)
+            .height(height)
             .pointerInput(Unit) {
                 detectTapGestures(onPress = { touchX = it.x; tryAwaitRelease(); touchX = null })
             }
@@ -141,24 +149,43 @@ fun GlucoseChart(
             t += hourMs
         }
 
-        // Trace (broken on gaps > 12 min)
+        // Trace, broken on gaps > 12 min; optionally smoothed (the dots stay on the real values)
         val visible = readings.filter { it.timestamp in start..end }
+        val times = LongArray(visible.size) { visible[it].timestamp }
+        val raw = FloatArray(visible.size) { visible[it].mgdl.toFloat() }
+        val line = if (smoothing >= 2) ChartMath.movingAverage(times, raw, passes = 2) else raw
         val path = Path()
-        var last: GlucoseReading? = null
-        for (r in visible) {
-            val px = x(r.timestamp); val py = y(r.mgdl.toFloat())
-            if (last == null || r.timestamp - last.timestamp > 12 * 60_000L) path.moveTo(px, py) else path.lineTo(px, py)
-            last = r
+        var first = 0
+        for (i in 1..visible.size) {
+            if (i < visible.size && times[i] - times[i - 1] <= 12 * 60_000L) continue
+            val n = i - first
+            val xs = FloatArray(n) { x(times[first + it]) }
+            val ys = FloatArray(n) { y(line[first + it].coerceIn(yMin, yMax)) }
+            path.moveTo(xs[0], ys[0])
+            if (smoothing == 0 || n < 3) {
+                for (k in 1 until n) path.lineTo(xs[k], ys[k])
+            } else {
+                val m = ChartMath.monotoneSlopes(xs, ys)
+                for (k in 0 until n - 1) {
+                    val c = ChartMath.controls(xs, ys, m, k)
+                    path.cubicTo(c[0], c[1], c[2], c[3], xs[k + 1], ys[k + 1])
+                }
+            }
+            first = i
         }
-        drawPath(path, scheme.onSurface.copy(alpha = 0.18f), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(
+            path,
+            scheme.onSurface.copy(alpha = if (showDots) 0.18f else 0.6f),
+            style = Stroke(width = (if (showDots) 2f else 2.5f).dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
 
         val dotR = if (windowHours <= 6) 3.2.dp.toPx() else 2.4.dp.toPx()
-        for (r in visible) drawCircle(colorOf(r.mgdl), dotR, Offset(x(r.timestamp), y(r.mgdl.toFloat())))
+        if (showDots) for (r in visible) drawCircle(colorOf(r.mgdl), dotR, Offset(x(r.timestamp), y(r.mgdl.toFloat())))
 
         // Meter results: a colour of their own (not a range colour, not the trace), a dashed guide
         // down to the time axis, a halo that cuts through the trace and the value in a filled tag.
         val half = 8.dp.toPx()
-        val visibleSticks = fingersticks.filter { it.timestamp in start..end }
+        val visibleSticks = if (showFingersticks) fingersticks.filter { it.timestamp in start..end } else emptyList()
         fun diamond(cx: Float, cy: Float, h: Float) = Path().apply {
             moveTo(cx, cy - h); lineTo(cx + h, cy); lineTo(cx, cy + h); lineTo(cx - h, cy); close()
         }

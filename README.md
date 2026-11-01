@@ -97,8 +97,8 @@ Il modulo `wear` è un'app per l'orologio, come GlucoDataHandler: riceve la glic
 
 | Complicazione | Tipi | Mostra |
 |---|---|---|
-| **Glicemia** | testo breve, testo lungo, indicatore | `123` grande, sotto la freccia e i minuti dall'ultima lettura (`↗ 3m`); `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
-| **Glicemia: variazione** | testo breve | `+4` rispetto alla lettura precedente |
+| **Glicemia** | testo breve, testo lungo, indicatore | `123` grande con la freccia sotto; `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
+| **Glicemia: variazione** | testo breve | `+4` rispetto alla lettura precedente, sotto i minuti dall'ultima lettura (`3m`) |
 | **Glicemia: ultima lettura** | testo breve | minuti dall'ultima lettura |
 
 Batteria:

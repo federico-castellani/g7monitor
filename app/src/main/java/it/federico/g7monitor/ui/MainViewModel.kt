@@ -30,7 +30,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -46,7 +48,11 @@ import javax.net.ssl.SSLException
 private val METER_NAMES = Regex("contour|accu-?chek|meter|onetouch|verio|caresens|gluco|true ?metrix|beurer|wellion|glucomen", RegexOption.IGNORE_CASE)
 
 enum class ChartWindow(val hours: Int, val label: String) {
-    H3(3, "3h"), H6(6, "6h"), H12(12, "12h"), H24(24, "24h")
+    H3(3, "3h"), H6(6, "6h"), H12(12, "12h"), H24(24, "24h");
+
+    companion object {
+        fun of(hours: Int) = entries.firstOrNull { it.hours == hours } ?: H6
+    }
 }
 
 /** What a server setup is for: uploading from the sensor, or receiving (follower). */
@@ -87,7 +93,8 @@ data class HomeState(
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel : ViewModel() {
     private val app = G7App.instance
-    private val window = MutableStateFlow(ChartWindow.H6)
+    /** The chart's hours, saved: the app reopens on the last choice. */
+    private val window = app.settings.settings.map { ChartWindow.of(it.chartHours) }.distinctUntilChanged()
 
     /** Ticks every 30 s so "x min ago" and the chart's time axis stay current. */
     private val clock = flow { while (true) { emit(System.currentTimeMillis()); delay(30_000) } }
@@ -142,7 +149,7 @@ class MainViewModel : ViewModel() {
 
     fun resetUpdate() = app.updater.reset()
 
-    fun setWindow(w: ChartWindow) { window.value = w }
+    fun setWindow(w: ChartWindow) = viewModelScope.launch { app.settings.setChartHours(w.hours) }
 
     fun setPairingCode(code: String) = viewModelScope.launch {
         val changed = app.settings.current().pairingCode != code

@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Watch
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
@@ -123,6 +124,7 @@ enum class SettingsPage(val title: String) {
     Source("Origine dei dati"),
     Updates("Aggiornamenti"),
     Watch("Orologio"),
+    Chart("Grafico"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -220,6 +222,7 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
                 Icons.Outlined.SwapHoriz, "Origine dei dati",
                 if (sensorMode) "Sensore G7 via Bluetooth" else "Server G7 Monitor",
             ) { actions.onOpenPage(SettingsPage.Source) }
+            MenuRow(Icons.AutoMirrored.Outlined.ShowChart, "Grafico", chartSummary(settings)) { actions.onOpenPage(SettingsPage.Chart) }
             MenuRow(Icons.Outlined.Watch, "Orologio", "Complicazioni, installazione e aggiornamenti") { actions.onOpenPage(SettingsPage.Watch) }
             val available = update.state is UpdateState.Available || update.state is UpdateState.NeedsPermission
             MenuRow(
@@ -259,6 +262,7 @@ fun SettingsPageScreen(
             SettingsPage.Source -> DataSourceSection(settings, actions)
             SettingsPage.Updates -> Panel { UpdatesPanel(update.state, update.installed, actions.update) }
             SettingsPage.Watch -> WatchSections()
+            SettingsPage.Chart -> ChartSections(settings)
         }
     }
 }

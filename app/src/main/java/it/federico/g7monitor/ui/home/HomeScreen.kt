@@ -165,6 +165,9 @@ fun HomeScreen(
                     lowMgdl = s.lowMgdl,
                     highMgdl = s.highMgdl,
                     mmol = s.useMmol,
+                    smoothing = s.chartSmoothing,
+                    showDots = s.chartDots,
+                    showFingersticks = s.chartFingersticks,
                 )
                 state.fingersticks.lastOrNull()?.let { f ->
                     val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(f.timestamp)) }
