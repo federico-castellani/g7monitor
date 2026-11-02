@@ -42,6 +42,7 @@ import androidx.wear.compose.material.Text
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
 
 private val LOW = Color(0xFFFF6B6F)
 private val IN_RANGE = Color(0xFF4CD597)
@@ -83,12 +84,12 @@ private fun UpdateChip(modifier: Modifier, onInstall: (WatchUpdater.Release) -> 
     when (val s = state) {
         is WatchUpdater.State.Available -> CompactChip(
             onClick = { onInstall(s.release) },
-            label = { Text("Aggiorna a ${s.release.version}", fontSize = 12.sp) },
+            label = { Text(stringResource(R.string.w_update_to, s.release.version), fontSize = 12.sp) },
             colors = ChipDefaults.primaryChipColors(),
             modifier = modifier,
         )
-        is WatchUpdater.State.Downloading -> Text("Download ${(s.progress * 100).toInt()}%", fontSize = 12.sp, color = STALE, modifier = modifier)
-        is WatchUpdater.State.Installing -> Text("Conferma l'installazione", fontSize = 12.sp, color = STALE, modifier = modifier)
+        is WatchUpdater.State.Downloading -> Text(stringResource(R.string.w_downloading, (s.progress * 100).toInt()), fontSize = 12.sp, color = STALE, modifier = modifier)
+        is WatchUpdater.State.Installing -> Text(stringResource(R.string.w_confirm_install), fontSize = 12.sp, color = STALE, modifier = modifier)
         is WatchUpdater.State.Failed -> Text(s.message, fontSize = 11.sp, color = LOW, textAlign = TextAlign.Center, modifier = modifier.padding(horizontal = 24.dp))
         else -> Unit
     }
@@ -120,7 +121,7 @@ private fun GlucoseScreen() {
         val reading = g
         if (reading == null) {
             Text(
-                "In attesa delle glicemie dal telefono.\nApri G7 Monitor sul telefono.",
+                stringResource(R.string.w_waiting),
                 textAlign = TextAlign.Center, color = STALE, fontSize = 14.sp,
             )
             return@Box
@@ -141,9 +142,9 @@ private fun GlucoseScreen() {
             Text(listOfNotNull(reading.unit, reading.deltaText?.takeIf { !stale }).joinToString("  ·  "), color = Color.LightGray, fontSize = 14.sp)
             Text(
                 when {
-                    minutes < 1 -> "adesso"
-                    stale -> "nessuna lettura da $minutes min"
-                    else -> "$minutes min fa"
+                    minutes < 1 -> stringResource(R.string.w_now)
+                    stale -> stringResource(R.string.w_no_reading_for, minutes.toInt())
+                    else -> stringResource(R.string.w_min_ago, minutes.toInt())
                 },
                 color = if (stale) LOW else STALE, fontSize = 13.sp,
             )

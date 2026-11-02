@@ -9,6 +9,8 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Encrypts the app's secrets at rest (server tokens, the sensor's authentication keys, the G7
@@ -47,7 +49,7 @@ object SecretBox {
             }
             String(cipher.doFinal(raw, IV_BYTES, raw.size - IV_BYTES)).also { opened[stored] = it }
         } catch (e: Exception) {
-            DebugLog.log("segreto non leggibile (${e.javaClass.simpleName}): va inserito di nuovo")
+            DebugLog.log(str(R.string.secret_unreadable, e.javaClass.simpleName))
             ""
         }
     }

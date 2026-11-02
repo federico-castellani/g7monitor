@@ -29,6 +29,8 @@ import it.federico.g7monitor.update.AppRelease
 import it.federico.g7monitor.update.AppUpdater
 import it.federico.g7monitor.update.UpdateState
 import it.federico.g7monitor.ui.components.IconBadge
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
 
 class UpdateActions(
     val onCheck: () -> Unit,
@@ -49,12 +51,14 @@ private val UpdateState.release: AppRelease?
     }
 
 /** Short state for the settings menu. */
+@Composable
 fun updateSummary(state: UpdateState, installed: String): String = when (state) {
-    is UpdateState.Checking -> "Versione $installed · controllo in corso…"
-    is UpdateState.UpToDate -> "Versione $installed · aggiornata"
-    is UpdateState.Downloading -> "Download della versione ${state.release.version}…"
+    is UpdateState.Checking -> stringResource(R.string.update_checking, installed)
+    is UpdateState.UpToDate -> stringResource(R.string.update_up_to_date, installed)
+    is UpdateState.Downloading -> stringResource(R.string.update_downloading_version, state.release.version)
     is UpdateState.Failed -> state.message
-    else -> state.release?.let { "Disponibile la versione ${it.version}" } ?: "Versione $installed"
+    else -> state.release?.let { stringResource(R.string.update_available_version, it.version) }
+        ?: stringResource(R.string.update_version, installed)
 }
 
 /** Home card: shown only while there is something to do with a new version. */
@@ -73,8 +77,8 @@ fun UpdateCard(state: UpdateState, actions: UpdateActions) {
                 )
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Aggiornamento disponibile", style = MaterialTheme.typography.titleMedium)
-                    Text("Versione ${release.version}", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.update_available), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.update_version, release.version), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             UpdateControls(state, actions)
@@ -86,14 +90,14 @@ fun UpdateCard(state: UpdateState, actions: UpdateActions) {
 @Composable
 fun UpdatesPanel(state: UpdateState, installed: String, actions: UpdateActions) {
     val context = LocalContext.current
-    Text("Versione installata: $installed", style = MaterialTheme.typography.bodyLarge)
+    Text(stringResource(R.string.update_installed, installed), style = MaterialTheme.typography.bodyLarge)
     when (state) {
         is UpdateState.Checking -> LinearProgressIndicator(Modifier.fillMaxWidth())
-        is UpdateState.UpToDate -> Text("È l'ultima versione.", style = MaterialTheme.typography.bodyMedium)
+        is UpdateState.UpToDate -> Text(stringResource(R.string.update_latest), style = MaterialTheme.typography.bodyMedium)
         else -> Unit
     }
     state.release?.let { release ->
-        Text("Nuova versione: ${release.version}", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.update_new, release.version), style = MaterialTheme.typography.titleMedium)
         release.notes.takeIf { it.isNotBlank() }?.let { notes ->
             Text(notes.take(1_500), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -103,17 +107,16 @@ fun UpdatesPanel(state: UpdateState, installed: String, actions: UpdateActions) 
         Text(state.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
     }
     if (state.release == null) {
-        Button(onClick = actions.onCheck, enabled = state !is UpdateState.Checking) { Text("Controlla ora") }
+        Button(onClick = actions.onCheck, enabled = state !is UpdateState.Checking) { Text(stringResource(R.string.update_check_now)) }
     }
     Text(
-        "L'app controlla da sola ogni qualche ora, quando la apri. Le nuove versioni arrivano dalla pagina " +
-            "GitHub del progetto; impostazioni, abbinamenti e letture restano.",
+        stringResource(R.string.update_explain),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     TextButton(onClick = {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(AppUpdater.RELEASES_PAGE)))
-    }) { Text("Apri la pagina delle versioni") }
+    }) { Text(stringResource(R.string.update_releases_page)) }
 }
 
 @Composable
@@ -123,16 +126,15 @@ private fun UpdateControls(state: UpdateState, actions: UpdateActions) {
     when (state) {
         is UpdateState.Downloading -> {
             LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
-            Text("Download in corso… ${(state.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.update_downloading, (state.progress * 100).toInt()), style = MaterialTheme.typography.bodySmall)
         }
         is UpdateState.Installing -> Text(
-            "Conferma l'installazione nella finestra di Android. L'app si riavvia da sola.",
+            stringResource(R.string.update_installing),
             style = MaterialTheme.typography.bodySmall,
         )
         is UpdateState.NeedsPermission -> {
             Text(
-                "Solo la prima volta: Android deve consentire a G7 Monitor di installare aggiornamenti. " +
-                    "Attiva l'opzione, torna qui e tocca di nuovo Aggiorna.",
+                stringResource(R.string.update_permission),
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(onClick = {
@@ -140,12 +142,12 @@ private fun UpdateControls(state: UpdateState, actions: UpdateActions) {
                 context.startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
                 )
-            }) { Text("Consenti") }
+            }) { Text(stringResource(R.string.action_allow)) }
         }
         is UpdateState.Failed -> {
             Text(state.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            Button(onClick = { actions.onInstall(release) }) { Text("Riprova") }
+            Button(onClick = { actions.onInstall(release) }) { Text(stringResource(R.string.action_retry)) }
         }
-        else -> Button(onClick = { actions.onInstall(release) }) { Text("Aggiorna") }
+        else -> Button(onClick = { actions.onInstall(release) }) { Text(stringResource(R.string.update_install)) }
     }
 }

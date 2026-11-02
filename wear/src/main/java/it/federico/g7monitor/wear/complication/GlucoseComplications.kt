@@ -4,11 +4,13 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.Icon
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationText
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.CountUpTimeReference
 import androidx.wear.watchface.complications.data.LongTextComplicationData
+import androidx.wear.watchface.complications.data.MonochromaticImage
 import androidx.wear.watchface.complications.data.NoDataComplicationData
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.RangedValueComplicationData
@@ -23,6 +25,7 @@ import androidx.wear.watchface.complications.datasource.TimeInterval
 import androidx.wear.watchface.complications.datasource.TimelineEntry
 import it.federico.g7monitor.wear.GlucoseStore
 import it.federico.g7monitor.wear.MainActivity
+import it.federico.g7monitor.wear.R
 import it.federico.g7monitor.wear.WatchGlucose
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -63,19 +66,19 @@ class GlucoseComplicationService : GlucoseSource() {
     override fun build(type: ComplicationType, g: WatchGlucose, stale: Boolean, tap: PendingIntent?): ComplicationData? {
         val value = if (stale) "---" else g.value
         val arrow = if (stale) "" else g.arrow
-        val description = text(if (stale) "Glicemia non aggiornata" else "Glicemia ${g.value} ${g.unit} ${g.arrow}")
+        val description = text(if (stale) getString(R.string.c_not_updated) else getString(R.string.c_glucose, g.value, g.unit, g.arrow))
         return when (type) {
             // Only the number as text: watch faces shrink a longer text ("123↗") to fit, and the glucose
-            // came out smaller than the 2-character change. The arrow goes in the small line, with the minutes.
-            // The arrow alone in the small line reads clearly; the minutes are on the "variazione" complication.
+            // came out smaller than the 2-character change. The arrow is the complication's icon, drawn
+            // bigger and bolder than a character in the small title line; the minutes are on "variazione".
             ComplicationType.SHORT_TEXT -> ShortTextComplicationData.Builder(text(value), description)
-                .apply { if (arrow.isNotEmpty()) setTitle(text(arrow)) }
+                .apply { arrowIcon(arrow)?.let { setMonochromaticImage(it) } }
                 .setTapAction(tap)
                 .build()
             ComplicationType.LONG_TEXT -> {
                 val details = listOfNotNull(arrow.ifEmpty { null }, if (stale) null else g.deltaText).joinToString(" ")
                 LongTextComplicationData.Builder(text("$value ${g.unit} $details".trim()), description)
-                    .setTitle(ago(g, "^1 fa"))
+                    .setTitle(ago(g, getString(R.string.c_ago)))
                     .setTapAction(tap)
                     .build()
             }
@@ -90,6 +93,20 @@ class GlucoseComplicationService : GlucoseSource() {
         }
     }
 
+    private fun arrowIcon(arrow: String): MonochromaticImage? {
+        val res = when (arrow) {
+            "⇈" -> R.drawable.ic_trend_double_up
+            "↑" -> R.drawable.ic_trend_up
+            "↗" -> R.drawable.ic_trend_up_right
+            "→" -> R.drawable.ic_trend_flat
+            "↘" -> R.drawable.ic_trend_down_right
+            "↓" -> R.drawable.ic_trend_down
+            "⇊" -> R.drawable.ic_trend_double_down
+            else -> return null
+        }
+        return MonochromaticImage.Builder(Icon.createWithResource(this, res)).build()
+    }
+
     private companion object {
         const val MIN = 40f
         const val MAX = 300f
@@ -101,7 +118,7 @@ class DeltaComplicationService : GlucoseSource() {
     override fun build(type: ComplicationType, g: WatchGlucose, stale: Boolean, tap: PendingIntent?): ComplicationData? {
         if (type != ComplicationType.SHORT_TEXT) return null
         val delta = if (stale) null else g.deltaText
-        return ShortTextComplicationData.Builder(text(delta ?: "--"), text(delta?.let { "Variazione $it ${g.unit}" } ?: "Variazione non disponibile"))
+        return ShortTextComplicationData.Builder(text(delta ?: "--"), text(delta?.let { getString(R.string.c_delta, it, g.unit) } ?: getString(R.string.c_delta_none)))
             .setTitle(ago(g))
             .setTapAction(tap)
             .build()
@@ -112,7 +129,7 @@ class DeltaComplicationService : GlucoseSource() {
 class AgeComplicationService : GlucoseSource() {
     override fun build(type: ComplicationType, g: WatchGlucose, stale: Boolean, tap: PendingIntent?): ComplicationData? {
         if (type != ComplicationType.SHORT_TEXT) return null
-        return ShortTextComplicationData.Builder(ago(g), text("Tempo dall'ultima lettura"))
+        return ShortTextComplicationData.Builder(ago(g), text(getString(R.string.c_age)))
             .setTitle(text(if (stale) "! G7" else "G7"))
             .setTapAction(tap)
             .build()

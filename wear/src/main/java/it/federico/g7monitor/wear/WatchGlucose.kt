@@ -19,6 +19,14 @@ object WatchContract {
     const val PHONE_VERSION = "/g7monitor/phone-version"
     /** Data item with this watch app's version, read by the phone. */
     const val WATCH_INFO = "/g7monitor/watch"
+    /** Message to the watch: the alarm ringing now (a DataMap with the keys below), or empty when it stopped. */
+    const val ALARM = "/g7monitor/alarm"
+    const val ALARM_TYPE = "type"
+    const val ALARM_TITLE = "title"
+    const val ALARM_TEXT = "text"
+    const val ALARM_SNOOZE_MIN = "snooze"
+    /** Message to the phone: "Posticipa" pressed on the watch, with the alarm type. */
+    const val ALARM_SNOOZE = "/g7monitor/alarm-snooze"
 }
 
 /** Latest reading received from the phone. */
@@ -37,7 +45,7 @@ data class WatchGlucose(
         get() = when {
             mgdl <= 39 -> "LOW"
             mgdl >= 401 -> "HIGH"
-            mmol -> String.format(Locale.ITALY, "%.1f", mgdl / MGDL_PER_MMOL)
+            mmol -> String.format(Locale.getDefault(), "%.1f", mgdl / MGDL_PER_MMOL)
             else -> mgdl.toString()
         }
 
@@ -62,7 +70,7 @@ data class WatchGlucose(
         get() {
             val d = delta ?: return null
             val sign = if (d >= 0) "+" else "−"
-            return if (mmol) sign + String.format(Locale.ITALY, "%.1f", abs(d) / MGDL_PER_MMOL) else sign + abs(d)
+            return if (mmol) sign + String.format(Locale.getDefault(), "%.1f", abs(d) / MGDL_PER_MMOL) else sign + abs(d)
         }
 
     fun isStale(now: Long = System.currentTimeMillis()) = now - time > STALE_MS

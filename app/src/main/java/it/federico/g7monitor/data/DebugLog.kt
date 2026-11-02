@@ -45,7 +45,7 @@ object DebugLog {
     }
 
     fun asText(): String {
-        val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.ITALY)
+        val fmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
         return _entries.value.joinToString("\n") { "${fmt.format(Date(it.time))}  ${it.message}" }
     }
 }

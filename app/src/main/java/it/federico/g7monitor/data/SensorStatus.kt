@@ -1,16 +1,21 @@
 package it.federico.g7monitor.data
 
 import it.federico.g7monitor.protocol.SensorState
+import androidx.annotation.StringRes
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
-enum class Link(val label: String) {
-    Off("Spento"),
-    Scanning("Ricerca sensore…"),
-    Connecting("Connessione…"),
-    Authenticating("Autenticazione…"),
-    Bonding("Abbinamento Bluetooth…"),
-    Receiving("Ricezione dati…"),
-    Waiting("In attesa della prossima lettura"),
-    Error("Errore"),
+enum class Link(@param:StringRes private val labelRes: Int) {
+    Off(R.string.link_off),
+    Scanning(R.string.link_scanning),
+    Connecting(R.string.link_connecting),
+    Authenticating(R.string.link_authenticating),
+    Bonding(R.string.link_bonding),
+    Receiving(R.string.link_receiving),
+    Waiting(R.string.link_waiting),
+    Error(R.string.link_error);
+
+    val label: String get() = str(labelRes)
 }
 
 data class SensorStatus(

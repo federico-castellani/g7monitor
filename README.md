@@ -33,6 +33,7 @@ App Android moderna per leggere la glicemia direttamente da un **Dexcom G7** via
     - lascia che il server scarti i doppioni.
   - **Server**: il telefono riceve le glicemie da un **G7 Monitor Server** (progetto separato), senza sensore. Basta un account in sola lettura. Il telefono chiede i dati solo quando è attesa una nuova lettura, circa ogni 5 minuti, senza tenere una connessione sempre aperta.
 - Verso il server solo HTTPS, con un codice di accesso revocabile per ogni telefono. La password non resta sul telefono.
+- In italiano e in inglese: l'app e l'orologio seguono la lingua del telefono. Le altre lingue usano l'inglese. Da Android 13 la lingua si può scegliere anche solo per l'app, in *Impostazioni di Android → App → G7 Monitor → Lingua*.
 
 ## Tecnologie
 
@@ -41,6 +42,7 @@ App Android moderna per leggere la glicemia direttamente da un **Dexcom G7** via
 - Crittografia J-PAKE su curva P-256 **implementata in Kotlin puro** (xDrip usa BouncyCastle: qui l'APK resta piccolo)
 - SQLite diretto per le letture, DataStore per le impostazioni
 - Foreground service di tipo `connectedDevice`; minSdk 31 (Android 12+), quindi niente permesso di posizione
+- Testi nei file `res/values/strings.xml` (inglese, lingua predefinita) e `res/values-it/strings.xml` (italiano), per l'app e per l'orologio. Per aggiungere una lingua basta una cartella `values-xx` con le stesse chiavi.
 
 ## Installare l'app (senza Android Studio)
 
@@ -97,7 +99,7 @@ Il modulo `wear` è un'app per l'orologio, come GlucoDataHandler: riceve la glic
 
 | Complicazione | Tipi | Mostra |
 |---|---|---|
-| **Glicemia** | testo breve, testo lungo, indicatore | `123` grande con la freccia sotto; `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
+| **Glicemia** | testo breve, testo lungo, indicatore | `123` grande con la freccia come icona; `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
 | **Glicemia: variazione** | testo breve | `+4` rispetto alla lettura precedente, sotto i minuti dall'ultima lettura (`3m`) |
 | **Glicemia: ultima lettura** | testo breve | minuti dall'ultima lettura |
 

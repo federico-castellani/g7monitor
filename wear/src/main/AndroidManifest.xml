@@ -41,7 +41,7 @@
                     android:pathPrefix="/g7monitor"
                     android:scheme="wear" />
             </intent-filter>
-            <!-- the phone's version, after the phone app is updated -->
+            <!-- the phone's version, after the phone app is updated; alarms ringing on the phone -->
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
                 <data
@@ -53,6 +53,10 @@
 
         <receiver
             android:name=".WatchUpdateReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".AlarmSnoozeReceiver"
             android:exported="false" />
 
         <!-- complications: updated only when a reading arrives (UPDATE_PERIOD_SECONDS = 0) -->

@@ -17,6 +17,11 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import it.federico.g7monitor.str
+import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.Typeface
+import androidx.core.graphics.drawable.IconCompat
 
 /** What the status notification shows; compared to avoid rebuilding an identical notification. */
 data class GlucoseNotificationData(
@@ -28,6 +33,8 @@ data class GlucoseNotificationData(
     val mmol: Boolean,
     val low: Int,
     val high: Int,
+    /** Status bar icon: the value instead of the app icon. */
+    val numberIcon: Boolean = false,
 )
 
 /**
@@ -37,7 +44,7 @@ data class GlucoseNotificationData(
  */
 object GlucoseNotification {
     const val HOURS = 3
-    private val timeFmt = SimpleDateFormat("HH:mm", Locale.ITALY)
+    private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     /**
      * The last [HOURS] of data for the notification or the widget.
@@ -54,6 +61,29 @@ object GlucoseNotification {
     }
 
     fun time(millis: Long): String = timeFmt.format(Date(millis))
+
+    /** After this the value is shown grey, and the status bar goes back to the app icon. */
+    const val STALE_MS = 15 * 60_000L
+
+    /**
+     * The value as a status bar icon. Android draws small icons as a mask (only the alpha is
+     * used), so the text is white on transparent, as large as fits: "95", "180", "5,5", "LOW".
+     */
+    fun numberIcon(context: Context, text: String): IconCompat {
+        val size = (24 * context.resources.displayMetrics.density).toInt().coerceAtLeast(24)
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+            textSize = size * 0.92f
+        }
+        // Shrink until the text fills the width without spilling over.
+        while (paint.measureText(text) > size * 1.02f && paint.textSize > 4f) paint.textSize *= 0.94f
+        val bounds = Rect().also { paint.getTextBounds(text, 0, text.length, it) }
+        Canvas(bitmap).drawText(text, size / 2f, size / 2f - bounds.exactCenterY(), paint)
+        return IconCompat.createWithBitmap(bitmap)
+    }
 
     /** Value colour for [mgdl] in the current light/dark theme (grey when [stale]). */
     fun valueColor(context: Context, d: GlucoseNotificationData, stale: Boolean): Int {
@@ -85,7 +115,7 @@ object GlucoseNotification {
         val time = timeFmt.format(Date(d.latest.timestamp))
         val dm = context.resources.displayMetrics
         if (expanded) {
-            v.setTextViewText(R.id.details, listOf(arrow, deltaText, "alle $time").filter { it.isNotEmpty() }.joinToString("  "))
+            v.setTextViewText(R.id.details, listOf(arrow, deltaText, str(R.string.notification_at, time)).filter { it.isNotEmpty() }.joinToString("  "))
             v.setTextViewText(R.id.status, d.status)
             val widthDp = (dm.widthPixels / dm.density - 64).toInt().coerceIn(240, 420)
             v.setImageViewBitmap(R.id.chart, chart(context, d, p, widthDp, 110, expanded = true))

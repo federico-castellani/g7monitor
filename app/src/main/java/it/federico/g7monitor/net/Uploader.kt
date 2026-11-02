@@ -12,6 +12,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import javax.net.ssl.SSLException
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Sends new readings to the server, designed for battery and data:
@@ -43,7 +45,7 @@ class Uploader(private val app: G7App) {
             if (now - (s.lastUploadAt ?: 0L) < s.uploadIntervalMin * 60_000L - 60_000L) return
         }
         if (!networkAvailable(s.uploadWifiOnly)) {
-            if (force) app.settings.setUploadResult(null, if (s.uploadWifiOnly) "In attesa del Wi-Fi" else "Nessuna connessione")
+            if (force) app.settings.setUploadResult(null, str(if (s.uploadWifiOnly) R.string.upload_waiting_wifi else R.string.upload_no_connection))
             return
         }
 
@@ -61,18 +63,18 @@ class Uploader(private val app: G7App) {
             failures = 0
             retryAt = 0
             if (sent > 0 || force || s.uploadError != null) app.settings.setUploadResult(now, null)
-            if (sent > 0) DebugLog.log("server: inviate $sent letture")
+            if (sent > 0) DebugLog.log(str(R.string.upload_sent, sent))
         } catch (e: ServerApi.HttpError) {
             if (e.status == 401) {
-                DebugLog.log("server: token revocato, telefono scollegato")
-                app.settings.disconnectServer("Il sito ha scollegato questo telefono: collegalo di nuovo")
+                DebugLog.log(str(R.string.upload_revoked))
+                app.settings.disconnectServer(str(R.string.net_unlinked_by_site))
             } else {
-                failed(now, e.message ?: "Errore del server")
+                failed(now, e.message ?: str(R.string.net_server_error))
             }
         } catch (e: SSLException) {
-            failed(now, "Certificato HTTPS del server non valido")
+            failed(now, str(R.string.net_bad_certificate))
         } catch (e: IOException) {
-            failed(now, "Server non raggiungibile")
+            failed(now, str(R.string.net_unreachable))
         }
     }
 
@@ -87,7 +89,7 @@ class Uploader(private val app: G7App) {
             } catch (e: ServerApi.HttpError) {
                 when (e.status) {
                     404 -> {
-                        if (!oldServerLogged) DebugLog.log("server: non conosce ancora le misurazioni del glucometro, aggiornalo")
+                        if (!oldServerLogged) DebugLog.log(str(R.string.upload_old_server))
                         oldServerLogged = true
                         return sent
                     }
@@ -111,7 +113,7 @@ class Uploader(private val app: G7App) {
                 sent++
             } catch (e: ServerApi.HttpError) {
                 if (e.status != 400) throw e
-                DebugLog.log("server: misurazione del glucometro rifiutata (${f.mgdl} mg/dL, ${e.message}): non la invio più")
+                DebugLog.log(str(R.string.upload_stick_refused, f.mgdl, e.message))
             }
             app.readings.markFingersticksUploaded(listOf(f))
         }
@@ -124,7 +126,7 @@ class Uploader(private val app: G7App) {
         failures++
         val wait = (5 * 60_000L shl (failures - 1).coerceAtMost(4)).coerceAtMost(60 * 60_000L)
         retryAt = now + wait
-        DebugLog.log("server: $message (riprovo tra ${wait / 60_000} min)")
+        DebugLog.log(str(R.string.net_retry_in, message, (wait / 60_000).toInt()))
         app.settings.setUploadResult(null, message)
     }
 

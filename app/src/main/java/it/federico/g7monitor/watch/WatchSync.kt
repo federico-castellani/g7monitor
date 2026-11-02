@@ -8,6 +8,8 @@ import it.federico.g7monitor.G7App
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import com.google.android.gms.wearable.DataMap
+import it.federico.g7monitor.alarm.ActiveAlarm
 
 /**
  * Keys of the data item shared with the watch app. Duplicated in the wear module
@@ -26,6 +28,14 @@ object WatchContract {
     const val PHONE_VERSION = "/g7monitor/phone-version"
     /** Data item published by the watch app with its version. */
     const val WATCH_INFO = "/g7monitor/watch"
+    /** Message to the watch: the alarm ringing now (a DataMap with the keys below), or empty when it stopped. */
+    const val ALARM = "/g7monitor/alarm"
+    const val ALARM_TYPE = "type"
+    const val ALARM_TITLE = "title"
+    const val ALARM_TEXT = "text"
+    const val ALARM_SNOOZE_MIN = "snooze"
+    /** Message to the phone: "Posticipa" pressed on the watch, with the alarm type. */
+    const val ALARM_SNOOZE = "/g7monitor/alarm-snooze"
 }
 
 /**
@@ -71,6 +81,24 @@ class WatchSync(private val app: G7App) {
             }
             nodes.map { Watch(it.id, it.displayName, versions[it.id]) }
         }.getOrDefault(emptyList())
+    }
+
+    /** The alarm ringing now (null: none) to the watches, where "Posticipa" silences it here too. */
+    suspend fun sendAlarm(alarm: ActiveAlarm?) = withContext(Dispatchers.IO) {
+        val nodes = runCatching { Tasks.await(Wearable.getNodeClient(app).connectedNodes, 10, TimeUnit.SECONDS) }.getOrNull()
+        if (nodes.isNullOrEmpty()) return@withContext
+        val data = alarm?.let {
+            DataMap().apply {
+                putString(WatchContract.ALARM_TYPE, it.type.name)
+                putString(WatchContract.ALARM_TITLE, it.type.title)
+                putString(WatchContract.ALARM_TEXT, it.text)
+                putInt(WatchContract.ALARM_SNOOZE_MIN, it.snoozeMin)
+            }.toByteArray()
+        } ?: ByteArray(0)
+        val messages = Wearable.getMessageClient(app)
+        for (node in nodes) {
+            runCatching { Tasks.await(messages.sendMessage(node.id, WatchContract.ALARM, data), 10, TimeUnit.SECONDS) }
+        }
     }
 
     /**

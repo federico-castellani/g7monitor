@@ -35,6 +35,8 @@ import it.federico.g7monitor.G7App
 import it.federico.g7monitor.alarm.AlarmType
 import it.federico.g7monitor.ui.theme.G7Theme
 import it.federico.g7monitor.ui.theme.LocalRangeColors
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
 
 /** Shown on top of the lock screen while an alarm rings; closes by itself when the alarm ends. */
 class AlarmActivity : ComponentActivity() {
@@ -81,7 +83,7 @@ class AlarmActivity : ComponentActivity() {
                         onClick = { engine.snooze(a.type); finish() },
                         colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
                         modifier = Modifier.fillMaxWidth().height(64.dp),
-                    ) { Text("Posticipa ${a.snoozeMin} minuti", fontSize = 18.sp) }
+                    ) { Text(stringResource(R.string.alarm_snooze_minutes, a.snoozeMin), fontSize = 18.sp) }
                 }
             }
         }

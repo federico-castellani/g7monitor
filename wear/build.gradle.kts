@@ -29,6 +29,11 @@ android {
         }
     }
 
+    androidResources {
+        // Declares the translated languages (values-it): Android 13+ lets the user pick one per app.
+        generateLocaleConfig = true
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

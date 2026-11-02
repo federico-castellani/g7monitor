@@ -75,6 +75,9 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 private data class Nearby(
     val address: String,
@@ -103,14 +106,14 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
     if (permitted) NearbyScanner { r -> nearby[r.address] = r.copy(count = (nearby[r.address]?.count ?: 0) + 1) }
 
-    val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.ITALY) }
+    val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val error = MaterialTheme.colorScheme.error
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Diagnostica") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") } },
+                title = { Text(stringResource(R.string.diag_title)) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
             )
         },
     ) { padding ->
@@ -122,37 +125,46 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                SectionCard("Stato", Icons.Outlined.MonitorHeart) {
-                    InfoLine("Collegamento", status.message ?: status.link.label, if (status.link == Link.Error) error else MaterialTheme.colorScheme.onSurface)
-                    InfoLine("Raccolta dati", if (settings.collectorEnabled) "attiva" else "spenta", if (settings.collectorEnabled) MaterialTheme.colorScheme.onSurface else error)
-                    InfoLine("Codice abbinamento", if (settings.pairingCode.isBlank()) "non impostato" else "impostato (${settings.pairingCode.length} cifre)")
-                    InfoLine("Sensore salvato", settings.sensorMac ?: "nessuno")
-                    InfoLine("Certificato", if (settings.hasCertificates) "configurato" else "non configurato")
-                    InfoLine("Permessi Bluetooth", if (permitted) "concessi" else "mancanti", if (permitted) MaterialTheme.colorScheme.onSurface else error)
+                SectionCard(stringResource(R.string.diag_status), Icons.Outlined.MonitorHeart) {
+                    InfoLine(stringResource(R.string.diag_link), status.message ?: status.link.label, if (status.link == Link.Error) error else MaterialTheme.colorScheme.onSurface)
+                    InfoLine(stringResource(R.string.diag_collection), stringResource(if (settings.collectorEnabled) R.string.diag_on else R.string.diag_off), if (settings.collectorEnabled) MaterialTheme.colorScheme.onSurface else error)
+                    InfoLine(
+                        stringResource(R.string.diag_code),
+                        if (settings.pairingCode.isBlank()) stringResource(R.string.diag_code_unset)
+                        else stringResource(R.string.diag_code_set, settings.pairingCode.length),
+                    )
+                    InfoLine(stringResource(R.string.diag_saved_sensor), settings.sensorMac ?: stringResource(R.string.diag_none))
+                    InfoLine(
+                        stringResource(R.string.diag_certificate),
+                        stringResource(if (settings.hasCertificates) R.string.diag_configured else R.string.diag_not_configured),
+                    )
+                    InfoLine(stringResource(R.string.diag_permissions), stringResource(if (permitted) R.string.diag_granted else R.string.diag_missing), if (permitted) MaterialTheme.colorScheme.onSurface else error)
                     BluetoothAdapterInfo(context)
                 }
             }
             if (status.link == Link.Scanning || scan.active) item {
-                SectionCard("Scansione in corso", Icons.AutoMirrored.Outlined.BluetoothSearching) {
+                SectionCard(stringResource(R.string.diag_scanning), Icons.AutoMirrored.Outlined.BluetoothSearching) {
                     val since = scan.startedAt?.let { (now - it) / 1000 } ?: 0
-                    InfoLine("Da", "${since / 60} min ${since % 60} s")
-                    InfoLine("Risultati col filtro G7", scan.filteredResults.toString())
-                    scan.lastResult?.let { InfoLine("Ultimo", "$it (${timeFmt.format(Date(scan.lastResultAt ?: 0))})") }
+                    InfoLine(stringResource(R.string.diag_since), stringResource(R.string.diag_duration, since / 60, since % 60))
+                    InfoLine(stringResource(R.string.diag_filtered), scan.filteredResults.toString())
+                    scan.lastResult?.let {
+                        InfoLine(stringResource(R.string.diag_last), stringResource(R.string.diag_last_value, it, timeFmt.format(Date(scan.lastResultAt ?: 0))))
+                    }
                 }
             }
             item {
-                SectionCard("Dispositivi vicini", Icons.Outlined.Radar) {
+                SectionCard(stringResource(R.string.diag_nearby), Icons.Outlined.Radar) {
                     if (!permitted) {
-                        Text("Concedi i permessi Bluetooth per vedere i dispositivi.", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.diag_grant), style = MaterialTheme.typography.bodyMedium)
                     } else {
                         Text(
-                            "Il G7 si annuncia come DXCMxx per pochi secondi, circa ogni 5 minuti.",
+                            stringResource(R.string.diag_g7_advert),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text("Solo Dexcom") })
-                            FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text("Tutti (${nearby.size})") })
+                            FilterChip(selected = !showAll, onClick = { showAll = false }, label = { Text(stringResource(R.string.diag_only_dexcom)) })
+                            FilterChip(selected = showAll, onClick = { showAll = true }, label = { Text(stringResource(R.string.diag_all, nearby.size)) })
                         }
                         val list = nearby.values
                             .filter { showAll || it.isG7 }
@@ -160,7 +172,7 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
                             .take(40)
                         if (list.isEmpty()) {
                             Text(
-                                if (showAll) "Nessun dispositivo ancora…" else "Nessun Dexcom visto finora (${nearby.size} altri dispositivi)",
+                                if (showAll) stringResource(R.string.diag_no_devices) else stringResource(R.string.diag_no_dexcom, nearby.size),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -172,13 +184,13 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
                 OutlinedButton(onClick = { showLog = !showLog }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.AutoMirrored.Outlined.Article, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (showLog) "Nascondi registro eventi" else "Mostra registro eventi (${entries.size})")
+                    Text(if (showLog) stringResource(R.string.diag_hide_log) else stringResource(R.string.diag_show_log, entries.size))
                 }
             }
             if (showLog) {
                 item {
                     SectionCard(
-                        "Registro eventi", Icons.AutoMirrored.Outlined.Article,
+                        stringResource(R.string.diag_log), Icons.AutoMirrored.Outlined.Article,
                         trailing = {
                             IconButton(onClick = {
                                 context.getSystemService(ClipboardManager::class.java)
@@ -190,13 +202,13 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
                                             }
                                         },
                                     )
-                                Toast.makeText(context, "Registro copiato", Toast.LENGTH_SHORT).show()
-                            }) { Icon(Icons.Outlined.ContentCopy, "Copia registro") }
-                            IconButton(onClick = { DebugLog.clear() }) { Icon(Icons.Outlined.DeleteOutline, "Pulisci registro") }
+                                Toast.makeText(context, R.string.diag_log_copied, Toast.LENGTH_SHORT).show()
+                            }) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.diag_copy_log)) }
+                            IconButton(onClick = { DebugLog.clear() }) { Icon(Icons.Outlined.DeleteOutline, stringResource(R.string.diag_clear_log)) }
                         },
                     ) {
-                        if (entries.isEmpty()) Text("Nessun evento.", style = MaterialTheme.typography.bodyMedium)
-                        else Text("Più recenti in alto", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (entries.isEmpty()) Text(stringResource(R.string.diag_no_events), style = MaterialTheme.typography.bodyMedium)
+                        else Text(stringResource(R.string.diag_newest_first), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 items(entries.asReversed()) { e ->
@@ -217,12 +229,15 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
 @Composable
 private fun BluetoothAdapterInfo(context: Context) {
     val adapter = remember { context.getSystemService(BluetoothManager::class.java).adapter }
-    InfoLine("Bluetooth", if (adapter?.isEnabled == true) "acceso" else "spento")
+    InfoLine("Bluetooth", stringResource(if (adapter?.isEnabled == true) R.string.diag_bt_on else R.string.diag_bt_off))
     val bondedDexcom = remember {
         runCatching { adapter?.bondedDevices?.filter { G7Gatt.isG7Name(it.name) }?.map { "${it.name} ${it.address}" } }
             .getOrNull().orEmpty()
     }
-    InfoLine("Dexcom abbinati ad Android", if (bondedDexcom.isEmpty()) "nessuno" else bondedDexcom.joinToString("\n"))
+    InfoLine(
+        stringResource(R.string.diag_bonded_dexcom),
+        if (bondedDexcom.isEmpty()) stringResource(R.string.diag_none) else bondedDexcom.joinToString("\n"),
+    )
 }
 
 @Composable
@@ -233,7 +248,7 @@ private fun DeviceRow(d: Nearby, now: Long) {
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                (d.name ?: "(senza nome)") + if (d.hasG7Service) "  · servizio Dexcom" else "",
+                (d.name ?: stringResource(R.string.diag_no_name)).let { if (d.hasG7Service) stringResource(R.string.diag_dexcom_service, it) else it },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (d.isG7) FontWeight.SemiBold else FontWeight.Normal,
             )
@@ -241,7 +256,7 @@ private fun DeviceRow(d: Nearby, now: Long) {
         }
         Column(horizontalAlignment = Alignment.End) {
             Text("${d.rssi} dBm", style = MaterialTheme.typography.bodySmall)
-            Text("${(now - d.lastSeen) / 1000}s fa · ${d.count}×", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.diag_seen_ago, (now - d.lastSeen) / 1000, d.count), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -270,7 +285,7 @@ private fun NearbyScanner(onResult: (Nearby) -> Unit) {
             }
 
             override fun onScanFailed(errorCode: Int) {
-                DebugLog.log("scansione diagnostica fallita, codice $errorCode")
+                DebugLog.log(str(R.string.diag_scan_failed, errorCode))
             }
         }
         runCatching {

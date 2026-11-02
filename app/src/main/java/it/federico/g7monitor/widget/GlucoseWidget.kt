@@ -64,8 +64,8 @@ class GlucoseWidget : AppWidgetProvider() {
             if (d == null) {
                 v.setTextViewText(R.id.value, "––")
                 v.setTextViewText(R.id.arrow, "")
-                v.setTextViewText(R.id.delta, "Nessuna lettura")
-                v.setTextViewText(R.id.time, "nelle ultime 3 ore")
+                v.setTextViewText(R.id.delta, context.getString(R.string.widget_no_reading))
+                v.setTextViewText(R.id.time, context.getString(R.string.widget_last_3h))
                 v.setImageViewBitmap(R.id.chart, null)
                 return v
             }
@@ -75,7 +75,10 @@ class GlucoseWidget : AppWidgetProvider() {
             v.setTextViewText(R.id.arrow, if (stale) "" else Glucose.arrow(d.latest.trend))
             val delta = d.previous?.takeIf { d.latest.timestamp - it.timestamp < 12 * 60_000L }?.let { d.latest.mgdl - it.mgdl }
             v.setTextViewText(R.id.delta, delta?.let { "${Glucose.formatDelta(it, d.mmol)} ${Glucose.unit(d.mmol)}" } ?: Glucose.unit(d.mmol))
-            v.setTextViewText(R.id.time, (if (stale) "non aggiornata · " else "") + "alle ${GlucoseNotification.time(d.latest.timestamp)}")
+            v.setTextViewText(
+                R.id.time,
+                context.getString(if (stale) R.string.widget_stale_at else R.string.widget_at, GlucoseNotification.time(d.latest.timestamp)),
+            )
 
             // Chart sized to the widget: its current size minus padding and the header row.
             val o = manager.getAppWidgetOptions(id)

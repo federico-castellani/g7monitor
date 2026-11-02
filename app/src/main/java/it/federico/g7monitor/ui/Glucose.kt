@@ -3,6 +3,9 @@ package it.federico.g7monitor.ui
 import it.federico.g7monitor.data.GlucoseReading
 import java.util.Locale
 import kotlin.math.abs
+import androidx.annotation.StringRes
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /** Unit conversion and trend helpers shared by UI and notification. */
 object Glucose {
@@ -32,13 +35,13 @@ object Glucose {
     fun format(mgdl: Int, mmol: Boolean): String = when {
         mgdl <= 39 -> "LOW"
         mgdl >= 401 -> "HIGH"
-        mmol -> String.format(Locale.ITALY, "%.1f", mgdl / MGDL_PER_MMOL)
+        mmol -> String.format(Locale.getDefault(), "%.1f", mgdl / MGDL_PER_MMOL)
         else -> mgdl.toString()
     }
 
     fun formatDelta(deltaMgdl: Int, mmol: Boolean): String {
         val sign = if (deltaMgdl >= 0) "+" else "−"
-        return if (mmol) sign + String.format(Locale.ITALY, "%.1f", abs(deltaMgdl) / MGDL_PER_MMOL)
+        return if (mmol) sign + String.format(Locale.getDefault(), "%.1f", abs(deltaMgdl) / MGDL_PER_MMOL)
         else sign + abs(deltaMgdl)
     }
 
@@ -46,14 +49,16 @@ object Glucose {
 
     fun toDisplay(mgdl: Double, mmol: Boolean): Double = if (mmol) mgdl / MGDL_PER_MMOL else mgdl
 
-    enum class Trend(val arrow: String, val label: String, val angle: Float, val double: Boolean = false) {
-        DoubleUp("⇈", "In rapida salita", -90f, true),
-        Up("↑", "In salita", -90f),
-        FortyFiveUp("↗", "In leggera salita", -45f),
-        Flat("→", "Stabile", 0f),
-        FortyFiveDown("↘", "In leggera discesa", 45f),
-        Down("↓", "In discesa", 90f),
-        DoubleDown("⇊", "In rapida discesa", 90f, true),
+    enum class Trend(val arrow: String, @param:StringRes private val labelRes: Int, val angle: Float, val double: Boolean = false) {
+        DoubleUp("⇈", R.string.trend_double_up, -90f, true),
+        Up("↑", R.string.trend_up, -90f),
+        FortyFiveUp("↗", R.string.trend_up_slow, -45f),
+        Flat("→", R.string.trend_flat, 0f),
+        FortyFiveDown("↘", R.string.trend_down_slow, 45f),
+        Down("↓", R.string.trend_down, 90f),
+        DoubleDown("⇊", R.string.trend_double_down, 90f, true);
+
+        val label: String get() = str(labelRes)
     }
 
     /** Dexcom-style thresholds in mg/dL per minute. */

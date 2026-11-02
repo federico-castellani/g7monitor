@@ -6,6 +6,7 @@ import android.hardware.biometrics.BiometricManager.Authenticators.BIOMETRIC_WEA
 import android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
+import it.federico.g7monitor.R
 
 /**
  * Asks for the phone's screen lock (PIN, pattern, password) or biometrics before a
@@ -18,7 +19,7 @@ object DeviceAuth {
     fun confirm(activity: Activity, title: String, subtitle: String, onResult: (ok: Boolean, error: String?) -> Unit) {
         val available = activity.getSystemService(BiometricManager::class.java).canAuthenticate(AUTHENTICATORS)
         if (available != BiometricManager.BIOMETRIC_SUCCESS) {
-            onResult(false, "Per disattivare un allarme il telefono deve avere un blocco schermo (PIN, sequenza, password o impronta).")
+            onResult(false, activity.getString(R.string.auth_needs_lock))
             return
         }
         BiometricPrompt.Builder(activity)

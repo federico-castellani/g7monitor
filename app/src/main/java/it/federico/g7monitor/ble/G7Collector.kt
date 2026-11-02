@@ -37,6 +37,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Drives the whole G7 cycle: find sensor -> connect -> authenticate (J-PAKE) ->
@@ -87,7 +89,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
 
     private fun setLink(link: Link, message: String? = null) {
         val old = app.status.value
-        if (old.link != link || old.message != message) log("stato: ${link.label}${message?.let { " — $it" } ?: ""}")
+        if (old.link != link || old.message != message) log(str(R.string.log_state, link.label + (message?.let { " — $it" } ?: "")))
         app.status.value = old.copy(link = link, message = message)
     }
 
@@ -95,18 +97,18 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         while (scope.isActive) {
             val s = app.settings.current()
             if (!s.pairingCode.matches(PAIRING_CODE)) {
-                setLink(Link.Error, "Inserisci il codice di abbinamento del sensore nelle impostazioni")
+                setLink(Link.Error, str(R.string.col_enter_code))
                 app.settings.settings.first { it.pairingCode.matches(PAIRING_CODE) }
                 continue
             }
             if (adapter == null || !adapter.isEnabled) {
-                setLink(Link.Error, "Bluetooth spento")
+                setLink(Link.Error, str(R.string.col_bluetooth_off))
                 delay(15_000)
                 continue
             }
             try {
                 // Saved sensor, or (if the address was lost) a G7 Android already has a bond with.
-                val savedMac = s.sensorMac ?: bondedG7()?.also { log("uso il G7 già abbinato ad Android: $it") }
+                val savedMac = s.sensorMac ?: bondedG7()?.also { log(str(R.string.log_use_bonded, it)) }
                 val known = savedMac?.let { runCatching { adapter.getRemoteDevice(it) }.getOrNull() }
                 val useKnown = known != null && BondHelper.isBonded(known) && !forceScan && consecutiveFailures < 3
                 forceScan = false
@@ -123,7 +125,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "cycle error", e)
-                log("errore: ${e.javaClass.simpleName}: ${e.message}")
+                log(str(R.string.log_error, e.javaClass.simpleName, e.message))
                 setLink(Link.Error, e.message)
                 delay(10_000)
             }
@@ -139,7 +141,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
 
     private suspend fun scan(preferredMac: String?): BluetoothDevice? {
         val scanner = adapter.bluetoothLeScanner ?: run {
-            log("scanner Bluetooth non disponibile")
+            log(str(R.string.log_no_scanner))
             return null
         }
         setLink(Link.Scanning)
@@ -162,7 +164,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             .build()
         val blocked = mutableSetOf<String>()
         val ignoredLogged = mutableSetOf<String>()
-        log(preferredMac?.let { "scansione avviata (solo il sensore $it)" } ?: "scansione avviata (servizio FEBC e nome DXCM)")
+        log(preferredMac?.let { str(R.string.log_scan_mac, it) } ?: str(R.string.log_scan_any))
         DebugLog.scan.value = DebugLog.ScanInfo(active = true, startedAt = System.currentTimeMillis())
         var failed = false
         val running = mutableListOf<ScanCallback>()
@@ -180,24 +182,24 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                                 DebugLog.scan.value = info.copy(
                                     filteredResults = info.filteredResults + 1,
                                     lastResultAt = System.currentTimeMillis(),
-                                    lastResult = "${name ?: "(senza nome)"} ${dev.address} ${result.rssi} dBm",
+                                    lastResult = "${name ?: str(R.string.log_no_name)} ${dev.address} ${result.rssi} dBm",
                                 )
                             }
                             if (dev.address in blocked) return
                             if (!matches) {
                                 // The unfiltered scan sees every device around: log only other G7s.
                                 if (G7Gatt.isG7Name(name) && ignoredLogged.add(dev.address)) {
-                                    log("ignorato $name ${dev.address}: non è il sensore abbinato")
+                                    log(str(R.string.log_ignored_other, name, dev.address))
                                 }
                                 return
                             }
                             scope.launch {
                                 if (app.settings.isBlocked(dev.address)) {
-                                    if (blocked.add(dev.address)) log("ignorato $name ${dev.address}: in pausa dopo un errore (riprovo tra qualche minuto)")
+                                    if (blocked.add(dev.address)) log(str(R.string.log_ignored_paused, name, dev.address))
                                     return@launch
                                 }
                                 if (cont.isActive) {
-                                    log("TROVATO $name ${dev.address} rssi=${result.rssi}")
+                                    log(str(R.string.log_found, name, dev.address, result.rssi))
                                     app.status.value = app.status.value.copy(deviceName = name)
                                     cont.resume(dev)
                                 }
@@ -205,7 +207,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                         }
 
                         override fun onScanFailed(errorCode: Int) {
-                            log("scansione fallita, codice $errorCode${if (errorCode == 6) " (avvii troppo frequenti)" else ""}")
+                            log(str(if (errorCode == 6) R.string.log_scan_failed_often else R.string.log_scan_failed, errorCode))
                             failed = true
                             if (cont.isActive) cont.resume(null)
                         }
@@ -226,7 +228,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             running.forEach { runCatching { scanner.stopScan(it) } }
         }
         DebugLog.scan.value = DebugLog.scan.value.copy(active = false)
-        if (found == null && !failed) log("nessun G7 visto in ${SCAN_RESTART_MS / 60_000} min, riavvio la scansione")
+        if (found == null && !failed) log(str(R.string.log_no_g7, (SCAN_RESTART_MS / 60_000).toInt()))
         if (failed) delay(30_000)
         return found
     }
@@ -240,7 +242,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         val client = GattClient(context, device) { log(it) }
         currentClient = client
         try {
-            log(if (autoConnect) "attendo il sensore $mac (riconnessione automatica)" else "connessione a $mac…")
+            log(str(if (autoConnect) R.string.log_wait_auto else R.string.log_connecting, mac))
             setLink(if (autoConnect) Link.Waiting else Link.Connecting)
             // autoConnect waits for the sensor's next advertisement (~every 5 min).
             val connected = client.connect(autoConnect, if (autoConnect) 15 * 60_000L else 30_000L)
@@ -259,7 +261,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                 return true
             }
 
-            log("connesso, scopro i servizi")
+            log(str(R.string.log_connected))
             setLink(Link.Connecting)
             if (!client.discover() || client.characteristic(G7Gatt.EXTRA_DATA) == null) {
                 log("service discovery failed / not a G7")
@@ -368,11 +370,11 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
     private suspend fun onDataRefused(client: GattClient, mac: String) {
         if (client.disconnectStatus != SENSOR_HUNG_UP) return // out of range, not a refusal
         dataDrops++
-        log("il sensore ha chiuso la connessione dopo la richiesta dei dati ($dataDrops di fila)")
+        log(str(R.string.log_data_drops, dataDrops))
         if (dataDrops < 2) return
         dataDrops = 0
-        log("ripristino l'abbinamento con il sensore: rimuovo il legame Bluetooth e la chiave")
-        setLink(Link.Error, "Il sensore rifiuta i dati: rifaccio l'abbinamento")
+        log(str(R.string.log_reset_bond))
+        setLink(Link.Error, str(R.string.col_refuses_data))
         runCatching { BondHelper.removeBond(client.device) }
         app.settings.setAuthKey(mac, null)
         auth?.forgetKey()
@@ -385,14 +387,14 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
      * encrypted and the sensor hangs up as soon as data is requested.
      */
     private suspend fun bond(client: GattClient, auth: G7Auth, mac: String): Boolean {
-        setLink(Link.Bonding, "Conferma l'abbinamento se Android lo chiede")
+        setLink(Link.Bonding, str(R.string.col_confirm_bond))
         auth.sharedKey()?.let { app.settings.setAuthKey(mac, it.toHex()) }
         // As xDrip before bonding: ask the sensor to keep the link open 60 s. The 25 s asked during
         // authentication often run out while Android's pairing request waits for the user, and then
         // the reading (and the backfill) only came at the next cycle, minutes later.
         if (!BondHelper.isBonded(client.device)) client.write(G7Gatt.AUTHENTICATION, KEEP_ALIVE_FOR_BONDING)
         val bonded = BondHelper.createBond(context, client.device)
-        log(if (bonded) "abbinamento Bluetooth completato" else "abbinamento Bluetooth NON riuscito")
+        log(str(if (bonded) R.string.log_bond_done else R.string.log_bond_failed))
         if (!bonded) return false
         auth.locallyBonded = true
         // Remember the sensor now: from here on we reconnect to it directly instead of scanning.
@@ -400,7 +402,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         // Give the link a moment to switch to encryption before asking for data.
         delay(1_500)
         if (!client.isConnected) {
-            log("il sensore ha chiuso la connessione dopo l'abbinamento: riprovo al prossimo ciclo")
+            log(str(R.string.log_closed_after_bond))
             return false
         }
         return true
@@ -424,7 +426,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             }
             AuthAction.ReadyForData -> {
                 val androidBond = BondHelper.isBonded(client.device)
-                log("autenticato e abbinato (legame Bluetooth di Android: ${if (androidBond) "presente" else "assente"})")
+                log(str(R.string.log_authenticated, str(if (androidBond) R.string.log_present else R.string.log_absent)))
                 mismatches.remove(mac)
                 auth.sharedKey()?.let { app.settings.setAuthKey(mac, it.toHex()) }
                 rememberSensor(mac)
@@ -438,7 +440,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                 return startData(client, flow)
             }
             AuthAction.BondFailure -> {
-                setLink(Link.Error, "Il sensore ha rifiutato l'abbinamento, riprovo")
+                setLink(Link.Error, str(R.string.col_bond_refused))
                 BondHelper.removeBond(client.device)
                 app.settings.setAuthKey(mac, null)
                 return false
@@ -449,14 +451,14 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
                 app.settings.setAuthKey(mac, null)
                 val strikes = (mismatches[mac] ?: 0) + 1
                 mismatches[mac] = strikes
-                log("autenticazione non riuscita su $mac (tentativo $strikes)")
+                log(str(R.string.log_auth_failed, mac, strikes))
                 if (strikes >= 3) {
                     // Probably an old sensor nearby or a really wrong code: pause it briefly.
-                    setLink(Link.Error, "Autenticazione fallita 3 volte: controlla il codice di abbinamento")
+                    setLink(Link.Error, str(R.string.col_auth_failed_3))
                     app.settings.block(mac, 10 * 60_000L)
                     mismatches.remove(mac)
                 } else {
-                    setLink(Link.Error, "Autenticazione non riuscita, riprovo")
+                    setLink(Link.Error, str(R.string.col_auth_retry))
                 }
                 return false
             }
@@ -472,10 +474,10 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         if (flow.dataStarted) return true
         flow.dataStarted = true
         setLink(Link.Receiving)
-        log("richiedo la glicemia")
+        log(str(R.string.log_request_glucose))
         repeat(2) { attempt ->
             if (client.enable(G7Gatt.CONTROL, indication = true) && client.write(G7Gatt.CONTROL, G7Commands.GLUCOSE)) return true
-            log("richiesta glicemia fallita (tentativo ${attempt + 1})")
+            log(str(R.string.log_request_failed, attempt + 1))
             delay(1_000)
         }
         return false
@@ -487,7 +489,7 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
             return
         }
         dataDrops = 0
-        log("glicemia ${g.glucoseMgdl} mg/dL, stato ${g.adjustedState.label}, età ${g.ageSeconds}s")
+        log(str(R.string.log_glucose, g.glucoseMgdl, g.adjustedState.label, g.ageSeconds))
         val now = System.currentTimeMillis()
         val state = g.adjustedState
         log("glucose $g")

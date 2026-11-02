@@ -20,6 +20,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.net.ssl.SSLException
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Follower mode: receives the readings from the server into the local store, so Home,
@@ -39,7 +41,7 @@ class Follower(private val app: G7App) {
     @Volatile private var legacy = false
     @Volatile private var connection: HttpURLConnection? = null
     @Volatile private var lastActivity = 0L
-    private val timeFmt = SimpleDateFormat("HH:mm", Locale.ITALY)
+    private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 
     // ------------------------------------------------------------------ live
 
@@ -63,16 +65,16 @@ class Follower(private val app: G7App) {
                         return@withLock
                     }
                     404 -> {
-                        DebugLog.log("server: ricezione in tempo reale non disponibile, uso le richieste periodiche")
+                        DebugLog.log(str(R.string.follow_no_live))
                         legacy = true
                     }
                     else -> {
-                        failed(e.message ?: "Errore del server")
+                        failed(e.message ?: str(R.string.net_server_error))
                         delay(retryDelay())
                     }
                 }
             } catch (e: SSLException) {
-                failed("Certificato HTTPS del server non valido")
+                failed(str(R.string.net_bad_certificate))
                 delay(retryDelay())
             } catch (e: IOException) {
                 failed("Collegamento al server interrotto")
@@ -89,7 +91,7 @@ class Follower(private val app: G7App) {
         try {
             failures = 0
             lastActivity = System.currentTimeMillis()
-            DebugLog.log("server: collegato in tempo reale")
+            DebugLog.log(str(R.string.follow_live))
             showStatus("Dal server · in tempo reale")
             withContext(Dispatchers.IO) {
                 ServerApi.readStream(
@@ -111,7 +113,7 @@ class Follower(private val app: G7App) {
     fun checkAlive() {
         val conn = connection ?: return
         if (System.currentTimeMillis() - lastActivity > DEAD_LINK_MS) {
-            DebugLog.log("server: nessun segnale da ${(System.currentTimeMillis() - lastActivity) / 60_000} min, mi ricollego")
+            DebugLog.log(str(R.string.follow_silent, ((System.currentTimeMillis() - lastActivity) / 60_000).toInt()))
             conn.disconnect()
         }
     }
@@ -130,13 +132,13 @@ class Follower(private val app: G7App) {
                 failures = 0
                 true
             } catch (e: ServerApi.HttpError) {
-                if (e.status == 401) revoked() else failed(e.message ?: "Errore del server")
+                if (e.status == 401) revoked() else failed(e.message ?: str(R.string.net_server_error))
                 false
             } catch (e: SSLException) {
-                failed("Certificato HTTPS del server non valido")
+                failed(str(R.string.net_bad_certificate))
                 false
             } catch (e: IOException) {
-                failed("Server non raggiungibile")
+                failed(str(R.string.net_unreachable))
                 false
             }
         }
@@ -167,7 +169,7 @@ class Follower(private val app: G7App) {
 
     private suspend fun receivedFingersticks(list: List<Fingerstick>) {
         val added = app.readings.insertFingersticks(list, fromServer = true)
-        if (added > 0) DebugLog.log("server: ricevute $added misurazioni del glucometro")
+        if (added > 0) DebugLog.log(str(R.string.follow_fingersticks, added))
     }
 
     private suspend fun received(rows: List<GlucoseReading>, always: Boolean = false) {
@@ -175,7 +177,7 @@ class Follower(private val app: G7App) {
         if (added == 0 && !always) return
         val now = System.currentTimeMillis()
         app.settings.setFollowResult(now, null)
-        if (added > 0) DebugLog.log("server: ricevute $added letture")
+        if (added > 0) DebugLog.log(str(R.string.follow_readings, added))
         showStatus("Dal server · aggiornato alle ${timeFmt.format(Date(now))}")
     }
 
@@ -188,9 +190,9 @@ class Follower(private val app: G7App) {
     }
 
     private suspend fun revoked() {
-        DebugLog.log("server: token revocato")
-        app.settings.disconnectFollow("Il sito ha scollegato questo telefono: collegalo di nuovo")
-        app.status.value = app.status.value.copy(link = Link.Error, message = "Telefono scollegato dal server")
+        DebugLog.log(str(R.string.follow_revoked))
+        app.settings.disconnectFollow(str(R.string.net_unlinked_by_site))
+        app.status.value = app.status.value.copy(link = Link.Error, message = str(R.string.follow_unlinked))
     }
 
     private suspend fun failed(message: String) {

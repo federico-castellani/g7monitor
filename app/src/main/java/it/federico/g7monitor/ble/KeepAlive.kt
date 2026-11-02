@@ -11,6 +11,8 @@ import it.federico.g7monitor.data.DebugLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Brings the service back if Android (or an aggressive battery manager) killed it:
@@ -44,9 +46,9 @@ class KeepAliveReceiver : BroadcastReceiver() {
             try {
                 if (!app.settings.current().collectorEnabled) return@launch
                 if (!G7Service.running.value) {
-                    DebugLog.log("servizio non attivo: lo riavvio")
+                    DebugLog.log(str(R.string.keepalive_restart))
                     runCatching { G7Service.start(context) }
-                        .onFailure { DebugLog.log("riavvio non consentito: ${it.javaClass.simpleName}") }
+                        .onFailure { DebugLog.log(str(R.string.keepalive_refused, it.javaClass.simpleName)) }
                 }
                 KeepAlive.schedule(context)
             } finally {

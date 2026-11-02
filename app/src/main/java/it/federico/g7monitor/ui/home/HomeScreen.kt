@@ -90,6 +90,9 @@ import it.federico.g7monitor.ui.components.SectionCard
 import it.federico.g7monitor.ui.components.StatTile
 import it.federico.g7monitor.ui.components.StatusPill
 import it.federico.g7monitor.ui.theme.LocalRangeColors
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,7 +120,7 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("G7 Monitor", fontWeight = FontWeight.SemiBold) },
                 actions = {
-                    if (!fromServer) IconButton(onClick = onOpenDiagnostics) { Icon(Icons.Outlined.MonitorHeart, "Diagnostica") }
+                    if (!fromServer) IconButton(onClick = onOpenDiagnostics) { Icon(Icons.Outlined.MonitorHeart, stringResource(R.string.home_diagnostics)) }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
@@ -146,7 +149,7 @@ fun HomeScreen(
             } else {
                 SensorCard(state, onOpenDiagnostics)
             }
-            SectionCard("Andamento", Icons.AutoMirrored.Outlined.ShowChart) {
+            SectionCard(stringResource(R.string.home_trend), Icons.AutoMirrored.Outlined.ShowChart) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     ChartWindow.entries.forEachIndexed { i, w ->
                         SegmentedButton(
@@ -170,15 +173,20 @@ fun HomeScreen(
                     showFingersticks = s.chartFingersticks,
                 )
                 state.fingersticks.lastOrNull()?.let { f ->
-                    val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(f.timestamp)) }
+                    val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(f.timestamp)) }
                     // Meter vs sensor at the same moment: a quick check of how far the sensor is off.
                     val sensor = remember(f, state.readings) { Glucose.sensorAt(state.readings, f.timestamp) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.WaterDrop, contentDescription = null, tint = LocalRangeColors.current.meter, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
+                        val meter = stringResource(R.string.home_meter_last, Glucose.format(f.mgdl, s.useMmol), Glucose.unit(s.useMmol), time)
                         Text(
-                            "Glucometro: ${Glucose.format(f.mgdl, s.useMmol)} ${Glucose.unit(s.useMmol)} alle $time" +
-                                (sensor?.let { " · sensore ${Glucose.format(it, s.useMmol)} (${Glucose.formatDifference(f.mgdl, it, s.useMmol)})" } ?: ""),
+                            sensor?.let {
+                                stringResource(
+                                    R.string.home_meter_vs_sensor, meter, Glucose.format(it, s.useMmol),
+                                    Glucose.formatDifference(f.mgdl, it, s.useMmol),
+                                )
+                            } ?: meter,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -186,9 +194,9 @@ fun HomeScreen(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile(Icons.Outlined.TrackChanges, "In target", state.timeInRange?.let { "$it%" } ?: "—", Modifier.weight(1f))
-                StatTile(Icons.Outlined.Equalizer, "Media", state.average?.let { Glucose.format(it, s.useMmol) } ?: "—", Modifier.weight(1f))
-                StatTile(Icons.Outlined.Timeline, "Letture", state.readings.size.toString(), Modifier.weight(1f))
+                StatTile(Icons.Outlined.TrackChanges, stringResource(R.string.home_in_range), state.timeInRange?.let { "$it%" } ?: "—", Modifier.weight(1f))
+                StatTile(Icons.Outlined.Equalizer, stringResource(R.string.home_average), state.average?.let { Glucose.format(it, s.useMmol) } ?: "—", Modifier.weight(1f))
+                StatTile(Icons.Outlined.Timeline, stringResource(R.string.home_readings), state.readings.size.toString(), Modifier.weight(1f))
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -210,16 +218,15 @@ private fun SetupCard(needsCode: Boolean, onOpenSettings: () -> Unit, onStart: (
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(if (needsCode) "Collega il tuo G7" else "Raccolta dati spenta", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(if (needsCode) R.string.home_connect_g7 else R.string.home_collection_off), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    if (needsCode) "Inserisci il codice di abbinamento stampato sull'applicatore."
-                    else "Avvia il collegamento per ricevere le letture.",
+                    stringResource(if (needsCode) R.string.home_connect_g7_text else R.string.home_collection_off_text),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
             Spacer(Modifier.width(8.dp))
             Button(onClick = if (needsCode) onOpenSettings else onStart) {
-                Text(if (needsCode) "Codice" else "Avvia")
+                Text(stringResource(if (needsCode) R.string.home_code else R.string.home_start))
             }
         }
     }
@@ -245,7 +252,7 @@ private fun ActiveAlarmCard(alarm: ActiveAlarm, onSnooze: (AlarmType) -> Unit) {
             Button(
                 onClick = { onSnooze(alarm.type) },
                 colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = MaterialTheme.colorScheme.onError),
-            ) { Text("Posticipa ${alarm.snoozeMin}'") }
+            ) { Text(stringResource(R.string.home_snooze, alarm.snoozeMin)) }
         }
     }
 }
@@ -263,9 +270,9 @@ private fun PausedAlarmsCard(until: Long, onResume: () -> Unit) {
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Allarmi sospesi", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                Text(stringResource(R.string.home_alarms_paused), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onErrorContainer)
                 Text(
-                    pausedText(until).removePrefix("Sospesi ").replaceFirstChar { it.uppercase() },
+                    pausedText(until, short = true),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
@@ -273,7 +280,7 @@ private fun PausedAlarmsCard(until: Long, onResume: () -> Unit) {
             Button(
                 onClick = onResume,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-            ) { Text("Riattiva") }
+            ) { Text(stringResource(R.string.home_resume)) }
         }
     }
 }
@@ -293,11 +300,11 @@ private fun ConnectServerCard(onOpenServer: () -> Unit) {
             )
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Collega il server", style = MaterialTheme.typography.titleMedium)
-                Text("Inserisci l'indirizzo del server G7 Monitor e il tuo account.", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.home_connect_server), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.home_connect_server_text), style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = onOpenServer) { Text("Collega") }
+            Button(onClick = onOpenServer) { Text(stringResource(R.string.home_connect)) }
         }
     }
 }
@@ -325,9 +332,9 @@ private fun ServerCard(state: HomeState, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(
                     error ?: when {
-                        ago == null -> "Dal server"
-                        ago < 1 -> "Dal server · aggiornato adesso"
-                        else -> "Dal server · aggiornato $ago min fa"
+                        ago == null -> stringResource(R.string.home_from_server)
+                        ago < 1 -> stringResource(R.string.home_from_server_now)
+                        else -> stringResource(R.string.home_from_server_ago, ago)
                     },
                     style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
                 )
@@ -336,7 +343,7 @@ private fun ServerCard(state: HomeState, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
                 )
             }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = "Server", tint = scheme.onSurfaceVariant)
+            Icon(Icons.Outlined.ChevronRight, contentDescription = stringResource(R.string.home_server), tint = scheme.onSurfaceVariant)
         }
     }
 }
@@ -356,10 +363,10 @@ private fun CurrentGlucoseCard(state: HomeState) {
     val trend = Glucose.trend(latest?.trend)
     val rangeLabel = when {
         latest == null -> null
-        state.isStale -> "Lettura non recente"
-        latest.mgdl < s.lowMgdl -> "Sotto il target"
-        latest.mgdl > s.highMgdl -> "Sopra il target"
-        else -> "Nel target"
+        state.isStale -> stringResource(R.string.home_stale)
+        latest.mgdl < s.lowMgdl -> stringResource(R.string.home_below)
+        latest.mgdl > s.highMgdl -> stringResource(R.string.home_above)
+        else -> stringResource(R.string.home_within)
     }
 
     Card(
@@ -388,11 +395,11 @@ private fun CurrentGlucoseCard(state: HomeState) {
             Text(Glucose.unit(s.useMmol), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
             if (latest == null) {
-                Text("Nessuna lettura", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.home_no_reading), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     state.minutesAgo?.let {
-                        StatusPill(Icons.Outlined.Schedule, if (it < 1) "adesso" else "$it min fa", MaterialTheme.colorScheme.onSurfaceVariant)
+                        StatusPill(Icons.Outlined.Schedule, if (it < 1) stringResource(R.string.time_now) else stringResource(R.string.time_min_ago, it), MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     state.delta?.let {
                         StatusPill(Icons.AutoMirrored.Outlined.ShowChart, "${Glucose.formatDelta(it, s.useMmol)} ${Glucose.unit(s.useMmol)}", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -463,7 +470,7 @@ private fun SensorCard(state: HomeState, onClick: () -> Unit) {
                     Text(st.message ?: st.link.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     st.deviceName?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant) }
                 }
-                Icon(Icons.Outlined.ChevronRight, contentDescription = "Diagnostica", tint = scheme.onSurfaceVariant)
+                Icon(Icons.Outlined.ChevronRight, contentDescription = stringResource(R.string.home_diagnostics), tint = scheme.onSurfaceVariant)
             }
             if (life != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -496,13 +503,13 @@ private fun sensorLife(state: HomeState): SensorLife? {
     val st = state.status.sensorState
     if (st == SensorState.WarmingUp || ageMin < 30) {
         val left = (30 - ageMin).coerceAtLeast(0)
-        return SensorLife("Riscaldamento sensore", "circa $left min rimanenti", (ageMin / 30f).coerceIn(0f, 1f), true)
+        return SensorLife(str(R.string.sensor_warmup), str(R.string.sensor_warmup_left, left), (ageMin / 30f).coerceIn(0f, 1f), true)
     }
     // G7: 10 days + 12 h grace period
     val totalMin = 10 * 24 * 60 + 12 * 60
     val leftMin = totalMin - ageMin
     val day = ageMin / (24 * 60) + 1
-    val left = if (leftMin <= 0) "scaduto" else "scade tra ${leftMin / (24 * 60)} g ${(leftMin / 60) % 24} h"
+    val left = if (leftMin <= 0) str(R.string.sensor_expired) else str(R.string.sensor_expires_in, leftMin / (24 * 60), (leftMin / 60) % 24)
     val extra = st?.takeIf { it != SensorState.Ok }?.label?.let { " · $it" } ?: ""
-    return SensorLife("Sensore · giorno $day$extra", left, (ageMin.toFloat() / totalMin).coerceIn(0f, 1f), false)
+    return SensorLife(str(R.string.sensor_day, day, extra), left, (ageMin.toFloat() / totalMin).coerceIn(0f, 1f), false)
 }

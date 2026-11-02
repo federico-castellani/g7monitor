@@ -31,6 +31,8 @@ import it.federico.g7monitor.ui.theme.LocalRangeColors
 import it.federico.g7monitor.update.AppUpdater
 import it.federico.g7monitor.watch.WatchSync
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
 
 /**
  * The Wear OS watch: whether G7 Monitor is on it and up to date, the update in one tap, and the
@@ -48,28 +50,29 @@ fun WatchSections() {
     val ok = LocalRangeColors.current.inRange
     val code = { v: String? -> v?.let(AppUpdater::versionCode) ?: 0 }
 
-    SectionCard("Il tuo orologio", Icons.Outlined.Watch) {
+    SectionCard(stringResource(R.string.watch_yours), Icons.Outlined.Watch) {
         val list = watches
         when {
-            list == null -> Text("Cerco l'orologio…", style = MaterialTheme.typography.bodyMedium)
+            list == null -> Text(stringResource(R.string.watch_searching), style = MaterialTheme.typography.bodyMedium)
             list.isEmpty() -> Text(
-                "Nessun orologio collegato al telefono. Controlla che sia acceso, vicino e abbinato nell'app " +
-                    "Galaxy Wearable (o Wear OS).",
+                stringResource(R.string.watch_none),
                 style = MaterialTheme.typography.bodyMedium,
             )
             else -> for (w in list) {
                 when {
                     w.appVersion == null -> SettingRow(
                         Icons.Outlined.ErrorOutline, w.name,
-                        "G7 Monitor non è installato sull'orologio, oppure non è mai stato aperto: segui l'installazione qui sotto",
+                        stringResource(R.string.watch_not_installed),
                         iconTint = MaterialTheme.colorScheme.error,
                     )
                     code(w.appVersion) < code(phone) -> SettingRow(
                         Icons.Outlined.SystemUpdate, w.name,
-                        "Versione ${w.appVersion}, sul telefono c'è la $phone: aggiornalo",
+                        stringResource(R.string.watch_outdated, w.appVersion, phone),
                         iconTint = MaterialTheme.colorScheme.tertiary,
                     )
-                    else -> SettingRow(Icons.Outlined.CheckCircle, w.name, "G7 Monitor ${w.appVersion}: aggiornato", iconTint = ok)
+                    else -> SettingRow(
+                        Icons.Outlined.CheckCircle, w.name, stringResource(R.string.watch_up_to_date, w.appVersion), iconTint = ok,
+                    )
                 }
             }
         }
@@ -78,32 +81,28 @@ fun WatchSections() {
             FilledTonalButton(onClick = {
                 scope.launch {
                     sync.announceVersion(force = true)
-                    Toast.makeText(context, "Sull'orologio è arrivata una notifica: toccala e conferma l'aggiornamento", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, R.string.watch_update_sent, Toast.LENGTH_LONG).show()
                 }
-            }) { Text("Aggiorna l'orologio") }
+            }) { Text(stringResource(R.string.watch_update)) }
         }
-        TextButton(onClick = { watches = null; refresh++ }) { Text("Controlla di nuovo") }
+        TextButton(onClick = { watches = null; refresh++ }) { Text(stringResource(R.string.watch_check_again)) }
         Text(
-            "Gli aggiornamenti dell'orologio arrivano da soli: quando aggiorni l'app sul telefono, sull'orologio compare " +
-                "una notifica; toccala e conferma. L'orologio scarica la nuova versione da internet.",
+            stringResource(R.string.watch_updates_text),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 
-    SectionCard("Prima installazione (una volta sola)", Icons.Outlined.SystemUpdate) {
+    SectionCard(stringResource(R.string.watch_first_install), Icons.Outlined.SystemUpdate) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val steps = listOf(
-                "Sull'orologio: Impostazioni → Info sull'orologio → Informazioni sul software, tocca 5 volte \"Versione software\": compaiono le Opzioni sviluppatore.",
-                "Opzioni sviluppatore: attiva \"Debug ADB\" e \"Debug wireless\" (orologio e computer sulla stessa rete Wi-Fi), poi tocca \"Abbina nuovo dispositivo\".",
-                "Sul computer scarica ed esegui lo script di installazione (pulsante qui sotto): ti chiede l'indirizzo e il codice mostrati dall'orologio, scarica l'ultima versione e la installa.",
-                "Apri G7 Monitor sull'orologio una volta e consenti le notifiche: da lì in poi si aggiorna da solo. Puoi spegnere il Debug wireless.",
-            )
-            steps.forEachIndexed { i, s -> Text("${i + 1}. $s", style = MaterialTheme.typography.bodyMedium) }
+            val steps = listOf(R.string.watch_step1, R.string.watch_step2, R.string.watch_step3, R.string.watch_step4)
+            steps.forEachIndexed { i, s ->
+                Text(stringResource(R.string.step_numbered, i + 1, stringResource(s)), style = MaterialTheme.typography.bodyMedium)
+            }
         }
         TextButton(onClick = {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(INSTALL_GUIDE)))
-        }) { Text("Apri lo script e la guida") }
+        }) { Text(stringResource(R.string.watch_open_guide)) }
     }
 }
 

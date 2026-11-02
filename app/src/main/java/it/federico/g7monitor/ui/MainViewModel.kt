@@ -43,6 +43,8 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.net.ssl.SSLException
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /** Names of common Bluetooth meters (used when the advertisement does not list the Glucose service). */
 private val METER_NAMES = Regex("contour|accu-?chek|meter|onetouch|verio|caresens|gluco|true ?metrix|beurer|wellion|glucomen", RegexOption.IGNORE_CASE)
@@ -220,7 +222,7 @@ class MainViewModel : ViewModel() {
     /** Step 1: is there a G7 Monitor server at this address? No credentials are sent. */
     fun checkServer(url: String, onResult: (ServerResult) -> Unit) = viewModelScope.launch {
         val base = ServerApi.normalizeUrl(url)
-            ?: return@launch onResult(ServerResult.Error("Indirizzo non valido: serve un indirizzo https://"))
+            ?: return@launch onResult(ServerResult.Error(str(R.string.vm_bad_address)))
         val result = withContext(Dispatchers.IO) { runCatching { ServerApi.checkServer(base) } }
         onResult(result.fold({ ServerResult.Ok(base) }, { ServerResult.Error(describe(it)) }))
     }
@@ -244,7 +246,7 @@ class MainViewModel : ViewModel() {
                 }
                 ServerPurpose.Follow -> {
                     app.settings.setFollow(url, paired.username, paired.token)
-                    app.status.value = SensorStatus(link = Link.Waiting, message = "Collegato al server")
+                    app.status.value = SensorStatus(link = Link.Waiting, message = str(R.string.vm_connected_server))
                     onResult(ServerResult.Ok(url))
                     app.follower.sync()
                     setCollector(true)
@@ -269,16 +271,16 @@ class MainViewModel : ViewModel() {
         val fetched = withContext(Dispatchers.IO) { runCatching { ServerApi.fetchSince(url, token, since, since) }.getOrNull() } ?: return
         app.readings.insertFingersticks(fetched.fingersticks, fromServer = true)
         val added = app.readings.insertAll(fetched.readings, fromServer = true)
-        if (added > 0) DebugLog.log("server: ripristinate $added letture delle ultime 24 ore")
+        if (added > 0) DebugLog.log(str(R.string.upload_restored, added))
     }
 
     private fun describe(e: Throwable): String = when (e) {
-        is ServerApi.HttpError -> e.message ?: "Errore del server"
+        is ServerApi.HttpError -> e.message ?: str(R.string.vm_server_error)
         is ServerApi.NotG7Server -> e.message!!
-        is UnknownHostException -> "Server non trovato: controlla l'indirizzo e la connessione"
-        is SSLException -> "Certificato HTTPS del server non valido"
-        is ConnectException, is SocketTimeoutException -> "Il server non risponde"
-        else -> "Connessione non riuscita (${e.javaClass.simpleName})"
+        is UnknownHostException -> str(R.string.vm_server_not_found)
+        is SSLException -> str(R.string.vm_bad_certificate)
+        is ConnectException, is SocketTimeoutException -> str(R.string.vm_no_response)
+        else -> str(R.string.vm_connection_failed, e.javaClass.simpleName)
     }
 
     fun disconnectServer(purpose: ServerPurpose) = viewModelScope.launch {
@@ -303,7 +305,7 @@ class MainViewModel : ViewModel() {
     /** Pausing keeps the server link; resuming sends at once what was collected meanwhile. */
     fun setUploadPaused(paused: Boolean) = viewModelScope.launch {
         app.settings.setUploadPaused(paused)
-        DebugLog.log(if (paused) "server: invio in pausa" else "server: invio riattivato")
+        DebugLog.log(str(if (paused) R.string.upload_paused_log else R.string.upload_resumed_log))
         if (!paused) app.uploader.maybeUpload(force = true)
     }
     fun setUploadInterval(minutes: Int) = viewModelScope.launch { app.settings.setUploadInterval(minutes) }
@@ -337,7 +339,7 @@ class MainViewModel : ViewModel() {
     fun startMeterScan(): String? {
         stopMeterScan()
         val scanner = app.getSystemService(BluetoothManager::class.java)?.adapter?.bluetoothLeScanner
-            ?: return "Bluetooth spento"
+            ?: return str(R.string.vm_bluetooth_off)
         _meters.value = emptyList()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -351,7 +353,7 @@ class MainViewModel : ViewModel() {
         val started = runCatching {
             scanner.startScan(null, ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), cb)
         }
-        if (started.isFailure) return "Servono i permessi Bluetooth: avvia prima il servizio"
+        if (started.isFailure) return str(R.string.vm_needs_service)
         scanCallback = cb
         _scanning.value = true
         scanTimer = viewModelScope.launch {
@@ -380,12 +382,12 @@ class MainViewModel : ViewModel() {
     fun pairMeter(meter: FoundMeter, onResult: (error: String?) -> Unit) = viewModelScope.launch {
         stopMeterScan()
         val adapter = app.getSystemService(BluetoothManager::class.java)?.adapter
-            ?: return@launch onResult("Bluetooth spento")
+            ?: return@launch onResult(str(R.string.vm_bluetooth_off))
         val device = adapter.getRemoteDevice(meter.address)
         val bonded = runCatching { BondHelper.createBond(app, device, 120_000) }.getOrDefault(false)
-        if (!bonded) return@launch onResult("Abbinamento non riuscito: controlla il PIN e che il glucometro sia in modalità abbinamento")
+        if (!bonded) return@launch onResult(str(R.string.vm_pairing_failed))
         app.settings.setMeter(meter.address, meter.name)
-        DebugLog.log("glucometro abbinato: ${meter.name ?: meter.address}")
+        DebugLog.log(str(R.string.mc_paired, meter.name ?: meter.address))
         onResult(null)
     }
 

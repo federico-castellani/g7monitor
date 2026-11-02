@@ -68,7 +68,7 @@ object WatchUpdater {
             if (r != null && r.code > installedCode(context)) State.Available(r) else State.UpToDate
         } catch (e: Exception) {
             Log.w(TAG, "check: $e")
-            if (force) State.Failed("Controllo non riuscito: l'orologio è collegato a internet?") else State.Idle
+            if (force) State.Failed(context.getString(R.string.w_check_failed)) else State.Idle
         }
     }
 
@@ -118,7 +118,7 @@ object WatchUpdater {
         } catch (e: Exception) {
             Log.w(TAG, "install: $e")
             if (id != -1) runCatching { installer.abandonSession(id) }
-            _state.value = State.Failed("Download non riuscito: riprova")
+            _state.value = State.Failed(context.getString(R.string.w_download_failed))
         }
     }
 
@@ -136,8 +136,8 @@ object WatchUpdater {
                 Log.w(TAG, "install status $status ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)}")
                 _state.value = State.Failed(
                     if (status == PackageInstaller.STATUS_FAILURE_CONFLICT || status == PackageInstaller.STATUS_FAILURE_INCOMPATIBLE)
-                        "Firma diversa: reinstalla una volta l'app dell'orologio con lo script"
-                    else "Installazione non riuscita",
+                        context.getString(R.string.w_signature)
+                    else context.getString(R.string.w_install_failed),
                 )
             }
         }
@@ -148,7 +148,7 @@ object WatchUpdater {
         val code = versionCode(phoneVersion) ?: return
         if (code <= installedCode(context)) return
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Aggiornamenti", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.w_channel_updates), NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java).putExtra(EXTRA_UPDATE, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -156,8 +156,8 @@ object WatchUpdater {
         )
         val n = android.app.Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("Aggiorna G7 Monitor")
-            .setContentText("Il telefono ha la versione $phoneVersion: tocca per aggiornare l'orologio")
+            .setContentTitle(context.getString(R.string.w_update_title))
+            .setContentText(context.getString(R.string.w_update_text, phoneVersion))
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

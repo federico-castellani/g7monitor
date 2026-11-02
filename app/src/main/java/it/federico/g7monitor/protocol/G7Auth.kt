@@ -4,6 +4,8 @@ import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Optional "app certificate" material that some G7 sensors require the first time
@@ -199,7 +201,12 @@ class G7Auth(
                 val authenticated = data.size >= 3 && data[0].toInt() == 0x05 && data[1].toInt() == 1
                 val bondedByte = if (data.size >= 3 && data[0].toInt() == 0x05) data[2].toInt() else 0
                 val bonded = bondedByte == 1
-                log("sensore: autenticato=${if (authenticated) "sì" else "no"}, abbinato=$bondedByte, chiave ${if (usedSavedKey) "salvata" else "nuova (J-PAKE)"}")
+                log(
+                    str(
+                        R.string.auth_log_result, str(if (authenticated) R.string.auth_yes else R.string.auth_no), bondedByte,
+                        str(if (usedSavedKey) R.string.auth_key_saved else R.string.auth_key_new),
+                    )
+                )
                 if (bondedByte == 3) reset()
                 if (!authenticated) {
                     log("auth: could not authenticate")
@@ -218,7 +225,7 @@ class G7Auth(
                 } else if (certificates?.isValid == true) {
                     changeState(State.SendCertificate0)
                 } else {
-                    throw ConfigException("Il sensore richiede i certificati (keks) per il primo abbinamento")
+                    throw ConfigException(str(R.string.auth_needs_certs))
                 }
                 return true
             }
@@ -226,7 +233,7 @@ class G7Auth(
             State.Pairing, State.SendKeyChallengeOut -> return true
 
             State.SendCertificate1, State.SendCertificate2 -> {
-                val size = certInfoSize(data) ?: throw ConfigException("Certificato rifiutato dal sensore")
+                val size = certInfoSize(data) ?: throw ConfigException(str(R.string.auth_cert_refused))
                 expectedSize = size
                 changeState(state) // keeps accumulator
                 return true
@@ -306,7 +313,7 @@ class G7Auth(
         if (savedKey != null) {
             // Not enforced (same as xDrip), but tells whether the sensor still has our key.
             val h = if (data.size >= 17) JPake.challengeHash(savedKey!!, lastToken) else null
-            if (h != null && (0 until 8).any { h[it] != data[it + 1] }) log("auth: il sensore non usa più la chiave salvata")
+            if (h != null && (0 until 8).any { h[it] != data[it + 1] }) log(str(R.string.auth_key_changed))
             return true
         }
         if (data.size < 17) return false

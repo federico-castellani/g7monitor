@@ -1,7 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- English: the default language, used when the system language has no translation. -->
 <resources>
-    <string name="app_name">G7 Monitor</string>
-    <string name="complication_glucose">Glicemia</string>
-    <string name="complication_delta">Glicemia: variazione</string>
-    <string name="complication_age">Glicemia: ultima lettura</string>
+    <string name="app_name" translatable="false">G7 Monitor</string>
+
+    <!-- 10_wear -->
+
+    <!-- Complications (names in the watch face picker) -->
+    <string name="complication_glucose">Glucose</string>
+    <string name="complication_delta">Glucose: change</string>
+    <string name="complication_age">Glucose: last reading</string>
+
+    <!-- Complication descriptions (screen readers) -->
+    <string name="c_not_updated">Glucose not updated</string>
+    <string name="c_glucose">Glucose %1$s %2$s %3$s</string>
+    <string name="c_ago">^1 ago</string>
+    <string name="c_delta">Change %1$s %2$s</string>
+    <string name="c_delta_none">Change not available</string>
+    <string name="c_age">Time since the last reading</string>
+
+    <!-- Watch app -->
+    <string name="w_update_to">Update to %1$s</string>
+    <string name="w_downloading">Download %1$d%%</string>
+    <string name="w_confirm_install">Confirm the installation</string>
+    <string name="w_waiting">Waiting for glucose from the phone.\nOpen G7 Monitor on the phone.</string>
+    <string name="w_now">now</string>
+    <string name="w_no_reading_for">no reading for %1$d min</string>
+    <string name="w_min_ago">%1$d min ago</string>
+
+    <!-- Watch updates -->
+    <string name="w_check_failed">Check failed: is the watch connected to the internet?</string>
+    <string name="w_download_failed">Download failed: try again</string>
+    <string name="w_signature">Different signature: reinstall the watch app once with the script</string>
+    <string name="w_install_failed">Installation failed</string>
+    <string name="w_channel_updates">Updates</string>
+    <string name="w_update_title">Update G7 Monitor</string>
+    <string name="w_update_text">The phone has version %1$s: tap to update the watch</string>
+
+    <!-- Alarms from the phone -->
+    <string name="w_channel_alarms">Glucose alarms</string>
+    <string name="w_snooze">Snooze %1$d min</string>
 </resources>

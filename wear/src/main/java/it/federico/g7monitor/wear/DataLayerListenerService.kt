@@ -21,11 +21,15 @@ class DataLayerListenerService : WearableListenerService() {
         Complications.refresh(this)
     }
 
-    /** The phone says its version: tell the phone ours (for its "Orologio" page) and offer the update. */
     override fun onMessageReceived(event: MessageEvent) {
-        if (event.path != WatchContract.PHONE_VERSION) return
-        publishVersion(this)
-        WatchUpdater.notifyPhoneVersion(this, String(event.data, Charsets.UTF_8))
+        when (event.path) {
+            // The phone says its version: tell the phone ours (for its "Orologio" page) and offer the update.
+            WatchContract.PHONE_VERSION -> {
+                publishVersion(this)
+                WatchUpdater.notifyPhoneVersion(this, String(event.data, Charsets.UTF_8))
+            }
+            WatchContract.ALARM -> WatchAlarm.onMessage(this, event.data)
+        }
     }
 
     companion object {

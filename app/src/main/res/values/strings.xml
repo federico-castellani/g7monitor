@@ -1,4 +1,644 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- English: the default language, used when the system language has no translation. -->
 <resources>
-    <string name="app_name">G7 Monitor</string>
+    <string name="app_name" translatable="false">G7 Monitor</string>
+
+    <!-- 00_common -->
+
+    <!-- Shared actions -->
+    <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_allow">Allow</string>
+    <string name="action_change">Change</string>
+    <string name="action_disconnect">Disconnect</string>
+
+    <!-- 10_settings -->
+
+    <!-- Settings menu -->
+    <string name="settings_title">Settings</string>
+    <string name="page_sensor">G7 sensor</string>
+    <string name="page_service">Background service</string>
+    <string name="page_display">Display</string>
+    <string name="page_source">Data source</string>
+    <string name="page_updates">Updates</string>
+    <string name="page_watch">Watch</string>
+    <string name="page_chart">Chart</string>
+    <string name="menu_links">Connections</string>
+    <string name="menu_app">App</string>
+    <string name="menu_sensor_no_code">Enter the pairing code</string>
+    <string name="menu_sensor_no_cert">The certificate for the first pairing is missing</string>
+    <string name="menu_sensor_paired">Paired · code %1$s</string>
+    <string name="menu_sensor_waiting">Code %1$s · waiting for the sensor</string>
+    <string name="menu_meter">Glucose meter</string>
+    <string name="menu_meter_paired">Paired</string>
+    <string name="menu_meter_optional">Optional · not paired</string>
+    <string name="menu_server_follow">Server (receiving)</string>
+    <string name="menu_server_upload">Server (uploading)</string>
+    <string name="menu_server_paused">Uploads paused · signed in as %1$s</string>
+    <string name="menu_server_connected">Signed in as %1$s</string>
+    <string name="menu_server_to_setup">To be set up</string>
+    <string name="menu_server_optional">Optional · not set up</string>
+    <string name="menu_service_on">Running · even with the app closed</string>
+    <string name="menu_service_starting">Starting…</string>
+    <string name="menu_service_off">Stopped · no alarms with the app closed</string>
+    <string name="menu_display_summary">%1$s · target %2$s–%3$s</string>
+    <string name="menu_source_sensor">G7 sensor via Bluetooth</string>
+    <string name="menu_source_server">G7 Monitor server</string>
+    <string name="menu_watch_summary">Complications, installation and updates</string>
+    <string name="menu_diagnostics">Diagnostics</string>
+    <string name="menu_diagnostics_summary">Connection status and event log</string>
+    <string name="disclaimer">G7 protocol based on xDrip+ (GPLv3). This app is not a medical device: do not use it for treatment decisions without checking with an approved device.</string>
+
+    <!-- Sensor page -->
+    <string name="sensor_pairing">Pairing</string>
+    <string name="sensor_code">Pairing code</string>
+    <string name="sensor_code_hint">Printed on the G7 applicator</string>
+    <string name="sensor_save_code">Save code</string>
+    <string name="sensor_paired">Paired sensor</string>
+    <string name="sensor_forget">Forget sensor</string>
+    <string name="sensor_forget_title">Forget the sensor?</string>
+    <string name="sensor_forget_text">The authentication key and the Bluetooth pairing will be removed. Use this when you change sensor or if the connection no longer works.</string>
+    <string name="sensor_forget_confirm">Forget</string>
+
+    <!-- Display page -->
+    <string name="display_unit">Unit</string>
+    <string name="display_range">Target range</string>
+
+    <!-- Data source page -->
+    <string name="source_sensor">G7 sensor</string>
+    <string name="source_server">Server</string>
+    <string name="source_server_text">Glucose comes from a G7 Monitor server: the phone does not connect to the sensor.</string>
+    <string name="source_sensor_text">The phone connects to the sensor via Bluetooth. The server is optional.</string>
+    <string name="source_to_server_title">Receive from the server?</string>
+    <string name="source_to_sensor_title">Use the sensor?</string>
+    <string name="source_to_server_text">The sensor connection stops and glucose will come from the server. The sensor settings stay saved.</string>
+    <string name="source_to_sensor_text">Receiving from the server stops and the phone will use the G7 sensor. The server connection stays saved.</string>
+
+    <!-- Service page -->
+    <string name="service_on">Service running</string>
+    <string name="service_starting">Service starting…</string>
+    <string name="service_off">Service stopped</string>
+    <string name="service_what_server">Receiving from the server, alarms and notification even with the app closed</string>
+    <string name="service_what_sensor">Sensor connection, alarms and notification even with the app closed</string>
+    <string name="service_explain">It starts by itself when the phone turns on and, if Android closes it, comes back within 15 minutes. Stopping it also turns the alarms off: that is why it asks to unlock the phone.</string>
+    <string name="service_stop">Stop service</string>
+    <string name="service_start">Run as a service</string>
+    <string name="service_battery_ok">No battery restrictions</string>
+    <string name="service_battery_ok_text">The app can update even with the screen off</string>
+    <string name="service_battery_ask">To avoid missing readings with the screen off, let the app run without battery restrictions.</string>
+    <string name="service_samsung">On Samsung: Settings → Battery → Background usage limits → Never sleeping apps → add G7 Monitor.</string>
+    <string name="service_app_settings">Open the app settings</string>
+
+    <!-- Certificate -->
+    <string name="cert_title">G7 certificate</string>
+    <string name="cert_bad_qr">QR not recognised: it must be the xDrip \"G Key\" QR (text starting with xdp2:)</string>
+    <string name="cert_imported">Certificate imported</string>
+    <string name="cert_configured">Certificate configured</string>
+    <string name="cert_configured_text">Only needed for the first pairing of a new sensor</string>
+    <string name="cert_explain">On the first pairing the G7 asks for an application certificate (in xDrip: \"G Key\"). Import it from the xDrip QR code.</string>
+    <string name="cert_empty_qr">Empty QR</string>
+    <string name="cert_no_scanner">Scanner not available: %1$s</string>
+    <string name="cert_scan_again">Scan again</string>
+    <string name="cert_scan">Scan the xDrip QR</string>
+    <string name="cert_hide_manual">Hide manual entry</string>
+    <string name="cert_show_manual">Paste text or values manually</string>
+    <string name="cert_qr_text">QR text (xdp2:…)</string>
+    <string name="cert_import_text">Import text</string>
+    <string name="cert_invalid">Invalid values</string>
+    <string name="cert_save">Save values</string>
+    <string name="display_status_number">Glucose in the status bar</string>
+    <string name="display_status_number_text">The current value instead of the app icon at the top of the screen. Needs the background service.</string>
+
+    <!-- 11_settings_pages -->
+
+    <!-- Chart page -->
+    <string name="chart_preview">Preview</string>
+    <string name="chart_preview_empty">No readings in the last %1$d hours: the preview will appear with the data.</string>
+    <string name="chart_smoothing">Line smoothing</string>
+    <string name="smoothing_none">None</string>
+    <string name="smoothing_light">Light</string>
+    <string name="smoothing_strong">Strong</string>
+    <string name="smoothing_none_text">A straight line from one reading to the next, as they come from the sensor.</string>
+    <string name="smoothing_light_text">A soft curve that goes exactly through every reading: the values do not change and the curve does not invent peaks.</string>
+    <string name="smoothing_strong_text">A curve on the average of nearby readings (about 20 minutes): it removes the small sensor fluctuations. The dots, if shown, stay on the real values.</string>
+    <string name="chart_show">What to show</string>
+    <string name="chart_dots">Reading dots</string>
+    <string name="chart_dots_on">A coloured dot for every reading</string>
+    <string name="chart_dots_off">Only the line, bolder</string>
+    <string name="chart_fingersticks">Glucose meter measurements</string>
+    <string name="chart_fingersticks_text">The purple diamonds with the value</string>
+    <string name="chart_window_note">The chart range (3, 6, 12 or 24 hours) is chosen above the chart and is kept when the app is opened again.</string>
+    <string name="chart_summary_dots">Smoothing: %1$s · dots shown</string>
+    <string name="chart_summary_line">Smoothing: %1$s · line only</string>
+
+    <!-- Watch page -->
+    <string name="watch_yours">Your watch</string>
+    <string name="watch_searching">Looking for the watch…</string>
+    <string name="watch_none">No watch connected to the phone. Check that it is on, nearby and paired in the Galaxy Wearable (or Wear OS) app.</string>
+    <string name="watch_not_installed">G7 Monitor is not installed on the watch, or has never been opened: follow the installation below</string>
+    <string name="watch_outdated">Version %1$s, the phone has %2$s: update it</string>
+    <string name="watch_up_to_date">G7 Monitor %1$s: up to date</string>
+    <string name="watch_update_sent">A notification has arrived on the watch: tap it and confirm the update</string>
+    <string name="watch_update">Update the watch</string>
+    <string name="watch_check_again">Check again</string>
+    <string name="watch_updates_text">Watch updates arrive by themselves: when you update the app on the phone, a notification appears on the watch; tap it and confirm. The watch downloads the new version from the internet.</string>
+    <string name="watch_first_install">First installation (only once)</string>
+    <string name="watch_step1">On the watch: Settings → About watch → Software information, tap \"Software version\" 5 times: Developer options appear.</string>
+    <string name="watch_step2">Developer options: turn on \"ADB debugging\" and \"Wireless debugging\" (watch and computer on the same Wi-Fi), then tap \"Pair new device\".</string>
+    <string name="watch_step3">On the computer download and run the install script (button below): it asks for the address and code shown by the watch, downloads the latest version and installs it.</string>
+    <string name="watch_step4">Open G7 Monitor on the watch once and allow notifications: from then on it updates by itself. You can turn Wireless debugging off.</string>
+    <string name="watch_open_guide">Open the script and the guide</string>
+    <string name="step_numbered">%1$d. %2$s</string>
+
+    <!-- Updates -->
+    <string name="update_checking">Version %1$s · checking…</string>
+    <string name="update_up_to_date">Version %1$s · up to date</string>
+    <string name="update_downloading_version">Downloading version %1$s…</string>
+    <string name="update_available_version">Version %1$s available</string>
+    <string name="update_version">Version %1$s</string>
+    <string name="update_available">Update available</string>
+    <string name="update_installed">Installed version: %1$s</string>
+    <string name="update_latest">This is the latest version.</string>
+    <string name="update_new">New version: %1$s</string>
+    <string name="update_check_now">Check now</string>
+    <string name="update_explain">The app checks by itself every few hours, when you open it. New versions come from the project\'s GitHub page; settings, pairings and readings are kept.</string>
+    <string name="update_releases_page">Open the releases page</string>
+    <string name="update_downloading">Downloading… %1$d%%</string>
+    <string name="update_installing">Confirm the installation in the Android window. The app restarts by itself.</string>
+    <string name="update_permission">Only the first time: Android must allow G7 Monitor to install updates. Turn the option on, come back here and tap Update again.</string>
+    <string name="update_install">Update</string>
+
+    <!-- 20_home -->
+
+    <!-- Home -->
+    <string name="home_diagnostics">Diagnostics</string>
+    <string name="home_trend">Trend</string>
+    <string name="home_meter_last">Glucose meter: %1$s %2$s at %3$s</string>
+    <string name="home_meter_vs_sensor">%1$s · sensor %2$s (%3$s)</string>
+    <string name="home_in_range">In range</string>
+    <string name="home_average">Average</string>
+    <string name="home_readings">Readings</string>
+    <string name="home_connect_g7">Connect your G7</string>
+    <string name="home_collection_off">Data collection off</string>
+    <string name="home_connect_g7_text">Enter the pairing code printed on the applicator.</string>
+    <string name="home_collection_off_text">Start the connection to receive readings.</string>
+    <string name="home_code">Code</string>
+    <string name="home_start">Start</string>
+    <string name="home_snooze">Snooze %1$d\'</string>
+    <string name="home_alarms_paused">Alarms paused</string>
+    <string name="home_resume">Turn back on</string>
+    <string name="home_connect_server">Connect the server</string>
+    <string name="home_connect_server_text">Enter the address of the G7 Monitor server and your account.</string>
+    <string name="home_connect">Connect</string>
+    <string name="home_from_server">From the server</string>
+    <string name="home_from_server_now">From the server · updated just now</string>
+    <string name="home_from_server_ago">From the server · updated %1$d min ago</string>
+    <string name="home_server">Server</string>
+    <string name="home_stale">Reading not recent</string>
+    <string name="home_below">Below target</string>
+    <string name="home_above">Above target</string>
+    <string name="home_within">In range</string>
+    <string name="home_no_reading">No readings</string>
+    <string name="time_now">now</string>
+    <string name="time_min_ago">%1$d min ago</string>
+    <string name="sensor_warmup">Sensor warm-up</string>
+    <string name="sensor_warmup_left">about %1$d min left</string>
+    <string name="sensor_expired">expired</string>
+    <string name="sensor_expires_in">expires in %1$d d %2$d h</string>
+    <string name="sensor_day">Sensor · day %1$d%2$s</string>
+
+    <!-- Chart -->
+    <string name="chart_tip_meter">Glucose meter %1$s · %2$s</string>
+    <string name="chart_tip_sensor">Sensor %1$s · difference %2$s</string>
+    <string name="chart_tip_no_sensor">No sensor reading at that time</string>
+
+    <!-- Trend -->
+    <string name="trend_double_up">Rising fast</string>
+    <string name="trend_up">Rising</string>
+    <string name="trend_up_slow">Rising slowly</string>
+    <string name="trend_flat">Steady</string>
+    <string name="trend_down_slow">Falling slowly</string>
+    <string name="trend_down">Falling</string>
+    <string name="trend_double_down">Falling fast</string>
+
+    <!-- 30_alarms -->
+
+    <!-- Alarm sounds -->
+    <string name="sound_urgent_low">Three falling beeps</string>
+    <string name="sound_low">Two falling tones</string>
+    <string name="sound_urgent_high">Three rising beeps</string>
+    <string name="sound_high">Two rising tones</string>
+    <string name="sound_falling">Downward glide</string>
+    <string name="sound_rising">Upward glide</string>
+    <string name="sound_signal">Low chime</string>
+
+    <!-- Alarm types -->
+    <string name="alarm_urgent_low">Urgent low glucose</string>
+    <string name="alarm_urgent_low_text">Rings when glucose is at or below the threshold</string>
+    <string name="alarm_low">Low glucose</string>
+    <string name="alarm_low_text">Rings when glucose drops below the threshold</string>
+    <string name="alarm_urgent_high">Urgent high glucose</string>
+    <string name="alarm_urgent_high_text">Rings when glucose is at or above the threshold</string>
+    <string name="alarm_high">High glucose</string>
+    <string name="alarm_high_text">Rings when glucose goes above the threshold</string>
+    <string name="alarm_falling">Falling fast</string>
+    <string name="alarm_falling_text">Rings when glucose falls faster than the threshold</string>
+    <string name="alarm_rising">Rising fast</string>
+    <string name="alarm_rising_text">Rings when glucose rises faster than the threshold</string>
+    <string name="alarm_signal">Signal loss</string>
+    <string name="alarm_signal_text">Rings when no readings arrive for too long</string>
+    <string name="output_both">Sound and vibration</string>
+    <string name="output_vibration">Vibration only</string>
+    <string name="output_sound">Sound only</string>
+
+    <!-- Alarm values -->
+    <string name="alarm_value_glucose">%1$s %2$s %3$s</string>
+    <string name="alarm_value_rate">more than %1$s %2$s per minute</string>
+    <string name="alarm_value_minutes">%1$d min without readings</string>
+
+    <!-- Alarm engine -->
+    <string name="alarm_test_text">TEST · not a real value</string>
+    <string name="alarm_no_reading_for">No readings for %1$s minutes</string>
+    <string name="alarm_notification_text">%1$s\n\nSnooze to silence it for %2$d minutes. If you don\'t snooze it, it rings again at every new reading while the condition is still true.</string>
+    <string name="alarm_snooze_min">Snooze %1$d min</string>
+    <string name="alarm_snooze_minutes">Snooze %1$d minutes</string>
+
+    <!-- Alarm screens -->
+    <string name="alarms_title">Alarms</string>
+    <string name="alarms_explain">Tap an alarm for threshold, sound and vibration. They ring on the phone\'s \"alarm\" channel, even in silent mode; turning one off needs the phone to be unlocked.</string>
+    <string name="alarm_off">Off</string>
+    <string name="alarm_on">On</string>
+    <string name="alarm_item_summary">%1$s · %2$s</string>
+    <string name="alarms_test_notifications">Test the notifications</string>
+    <string name="paused_until_resumed">Paused until you turn them back on</string>
+    <string name="paused_until">Paused until %1$s</string>
+    <string name="paused_until_tomorrow">Paused until tomorrow at %1$s</string>
+    <string name="paused_until_resumed_short">Until you turn them back on</string>
+    <string name="paused_until_short">Until %1$s</string>
+    <string name="paused_until_tomorrow_short">Until tomorrow at %1$s</string>
+    <string name="pause_30">30 minutes</string>
+    <string name="pause_60">1 hour</string>
+    <string name="pause_120">2 hours</string>
+    <string name="pause_480">8 hours</string>
+    <string name="pause_forever">Until I turn them back on</string>
+    <string name="alarms_all">All alarms</string>
+    <string name="alarms_paused_kept">%1$s · settings are kept</string>
+    <string name="alarms_active">On · turn them off here to pause them all together</string>
+    <string name="alarms_pause_title">Pause all alarms?</string>
+    <string name="alarms_pause_text">No alarm will ring. Each one keeps its settings and is back on when they resume.</string>
+    <string name="warn_collection_off">Data collection is off: without it the alarms do not ring with the app closed.</string>
+    <string name="warn_notifications_off">The app\'s notifications are turned off.</string>
+    <string name="warn_full_screen">The alarm cannot appear full screen on the locked phone.</string>
+    <string name="warn_volume_zero">The phone\'s alarm volume is at zero: alarms will only vibrate.</string>
+    <string name="warn_title">Attention</string>
+    <string name="warn_fix">Fix</string>
+    <string name="alarm_status">Status</string>
+    <string name="alarm_off_needs_unlock">Turning it off needs the phone to be unlocked</string>
+    <string name="alarm_when">When it rings</string>
+    <string name="alarm_threshold">Threshold</string>
+    <string name="alarm_snooze_for">\"Snooze\" silences for</string>
+    <string name="alarm_repeat">If nobody reacts, the alarm rings again at every new reading while the condition is still true.</string>
+    <string name="alarm_how">How it alerts</string>
+    <string name="alarm_sound">Sound</string>
+    <string name="alarm_recommended">%1$s (recommended)</string>
+    <string name="alarm_phone_sound">Phone sound…</string>
+    <string name="alarm_chosen_sound">Chosen sound</string>
+    <string name="alarm_volume">Volume</string>
+    <string name="alarm_volume_note">Relative to the phone\'s alarm volume.</string>
+    <string name="alarm_test">Test</string>
+    <string name="alarm_listen">Play sound</string>
+    <string name="alarm_stop">Stop</string>
+    <string name="alarm_test_explain">Sets off the alarm as if it were real (notification, full-screen page, sound and vibration), marked as TEST. Stop it with Snooze. With \"in 10 s\" you have time to lock the phone.</string>
+    <string name="alarm_test_now">Test alarm</string>
+    <string name="alarm_test_later_toast">The test alarm will ring in 10 seconds: lock the phone</string>
+    <string name="alarm_test_later">Test in 10 s</string>
+
+    <!-- 40_sensor -->
+
+    <!-- Sensor states (from the G7) -->
+    <string name="state_unknown">Unknown</string>
+    <string name="state_stopped">Stopped</string>
+    <string name="state_warming_up">Warming up</string>
+    <string name="state_excess_noise">Excessive noise</string>
+    <string name="state_first_calibration">Initial calibration needed</string>
+    <string name="state_second_calibration">Second calibration needed</string>
+    <string name="state_ok">OK</string>
+    <string name="state_calibration">Calibration needed</string>
+    <string name="state_calibration_confused">Inconsistent calibration</string>
+    <string name="state_other_calibration">Another calibration needed</string>
+    <string name="state_failed">Sensor failed</string>
+    <string name="state_unusual_calibration">Unusual calibration</string>
+    <string name="state_insufficient_calibration">Insufficient calibration</string>
+    <string name="state_ended">Ended</string>
+    <string name="state_transmitter">Transmitter problem</string>
+    <string name="state_errors">Sensor errors</string>
+    <string name="state_failed_start">Sensor start failed</string>
+    <string name="state_expired">Sensor expired</string>
+    <string name="state_sensor_stopped">Sensor stopped</string>
+
+    <!-- Connection states -->
+    <string name="link_off">Off</string>
+    <string name="link_scanning">Looking for the sensor…</string>
+    <string name="link_connecting">Connecting…</string>
+    <string name="link_authenticating">Authenticating…</string>
+    <string name="link_bonding">Bluetooth pairing…</string>
+    <string name="link_receiving">Receiving data…</string>
+    <string name="link_waiting">Waiting for the next reading</string>
+    <string name="link_error">Error</string>
+
+    <!-- Service and notification -->
+    <string name="service_sensor_state">Sensor: %1$s</string>
+    <string name="service_no_recent">No recent reading</string>
+    <string name="service_starting_short">Starting…</string>
+    <string name="service_needs_bluetooth">Bluetooth permissions are needed: turn data collection back on</string>
+    <string name="service_start_refused">Start not allowed by Android</string>
+    <string name="notification_at">at %1$s</string>
+    <string name="channel_status">Current glucose</string>
+    <string name="channel_status_text">Shows the latest glucose and the sensor status</string>
+    <string name="channel_alarms">Glucose alarms</string>
+    <string name="channel_alarms_text">Low or high glucose, rapid changes, signal loss</string>
+    <string name="meter_stopped">Stopped</string>
+
+    <!-- 50_main -->
+
+    <!-- Main activity -->
+    <string name="main_needs_bluetooth">Bluetooth permissions are needed to connect to the sensor</string>
+    <string name="main_stop_service_title">Stop the service?</string>
+    <string name="main_stop_service_text">Alarms will stop working too</string>
+    <string name="main_pause_alarms_title">Pause all alarms?</string>
+    <string name="main_confirm_unlock">Confirm by unlocking the phone</string>
+    <string name="main_disable_alarm_title">Turn the alarm off?</string>
+    <string name="main_disable_alarm_text">%1$s: confirm by unlocking the phone</string>
+    <string name="tab_glucose">Glucose</string>
+    <string name="tab_alarms">Alarms</string>
+    <string name="tab_settings">Settings</string>
+    <string name="main_sound_for">Sound for \"%1$s\"</string>
+    <string name="auth_needs_lock">To turn an alarm off the phone must have a screen lock (PIN, pattern, password or fingerprint).</string>
+
+    <!-- View model -->
+    <string name="vm_bad_address">Invalid address: an https:// address is needed</string>
+    <string name="vm_connected_server">Connected to the server</string>
+    <string name="vm_server_error">Server error</string>
+    <string name="vm_server_not_found">Server not found: check the address and the connection</string>
+    <string name="vm_bad_certificate">The server\'s HTTPS certificate is not valid</string>
+    <string name="vm_no_response">The server does not respond</string>
+    <string name="vm_connection_failed">Connection failed (%1$s)</string>
+    <string name="vm_bluetooth_off">Bluetooth is off</string>
+    <string name="vm_needs_service">Bluetooth permissions are needed: start the service first</string>
+    <string name="vm_pairing_failed">Pairing failed: check the PIN and that the meter is in pairing mode</string>
+
+    <!-- Widget -->
+    <string name="widget_no_reading">No readings</string>
+    <string name="widget_last_3h">in the last 3 hours</string>
+    <string name="widget_stale_at">not updated · at %1$s</string>
+    <string name="widget_at">at %1$s</string>
+
+    <!-- Widget picker -->
+    <string name="widget_description">Current glucose with arrow, change and chart of the last 3 hours</string>
+
+    <!-- 60_server -->
+
+    <!-- Server screens -->
+    <string name="srv_title_follow">Server to receive from</string>
+    <string name="srv_title_upload">Server to upload to</string>
+    <string name="srv_welcome_title">Where does the glucose come from?</string>
+    <string name="srv_welcome_text">You can change this at any time in the settings.</string>
+    <string name="srv_from_sensor">From the G7 sensor</string>
+    <string name="srv_from_sensor_text">This phone connects to the sensor via Bluetooth. It also works without a server; if you want, you can upload the glucose to a server to share it.</string>
+    <string name="srv_from_server">From the server</string>
+    <string name="srv_from_server_text">Receive another person\'s glucose from a G7 Monitor server, without a sensor.</string>
+    <string name="srv_address_title">Server address</string>
+    <string name="srv_address_follow">The address of the G7 Monitor server to receive the glucose from. You find it in the browser bar when you open the site.</string>
+    <string name="srv_address_upload">The address of the G7 Monitor server to upload the sensor\'s glucose to.</string>
+    <string name="srv_address">Address</string>
+    <string name="srv_address_example">glucose.example.com</string>
+    <string name="srv_https_only">Secure connections only (https)</string>
+    <string name="srv_continue">Continue</string>
+    <string name="srv_enter_totp">Enter the verification code</string>
+    <string name="srv_sign_in">Sign in</string>
+    <string name="srv_found">Server found: %1$s</string>
+    <string name="srv_sign_in_follow">Use your account on the site. A read-only account is enough.</string>
+    <string name="srv_sign_in_upload">You need an account allowed to upload glucose.</string>
+    <string name="srv_username">Username</string>
+    <string name="srv_password">Password</string>
+    <string name="srv_totp">Verification code</string>
+    <string name="srv_totp_hint">From the authenticator app</string>
+    <string name="srv_password_note">The password is only needed now: the phone keeps an access code that you can revoke from the site.</string>
+    <string name="srv_connection">Connection</string>
+    <string name="srv_g7_server">G7 Monitor server</string>
+    <string name="srv_account_follow">Account (receiving)</string>
+    <string name="srv_account_upload">Account (uploading)</string>
+    <string name="srv_paused">Uploads paused</string>
+    <string name="srv_paused_text">The connection stays saved: turn it back on below whenever you want</string>
+    <string name="srv_last_update">Last update: %1$s</string>
+    <string name="srv_last_upload">Last upload: %1$s</string>
+    <string name="srv_waiting_first">Waiting for the first update</string>
+    <string name="srv_waiting_next">Waiting for the next reading</string>
+    <string name="srv_update_now">Update now</string>
+    <string name="srv_upload_now">Upload now</string>
+    <string name="srv_receiving">Receiving</string>
+    <string name="srv_background">In the background</string>
+    <string name="srv_background_text">Notification with the latest glucose, even with the app closed</string>
+    <string name="srv_follow_explain">The phone asks the server for data only when a new reading is expected (about every 5 minutes), without keeping a connection always open.</string>
+    <string name="srv_uploading">Uploading</string>
+    <string name="srv_upload_to_server">Upload to the server</string>
+    <string name="srv_upload_paused">Paused: readings stay on the phone and are all sent when you turn it back on</string>
+    <string name="srv_upload_active">On: readings go to the server</string>
+    <string name="srv_upload_frequency">Upload frequency</string>
+    <string name="interval_5">5 min</string>
+    <string name="interval_15">15 min</string>
+    <string name="interval_30">30 min</string>
+    <string name="interval_60">1 hour</string>
+    <string name="srv_frequency_explain">With 5 minutes your followers see each reading right away. Longer intervals group the readings into one upload: less battery and less data.</string>
+    <string name="srv_wifi_only">Wi-Fi only</string>
+    <string name="srv_wifi_only_text">On mobile data the readings stay on the phone</string>
+    <string name="srv_disconnect">Disconnect from the server</string>
+    <string name="srv_disconnect_title">Disconnect the server?</string>
+    <string name="srv_disconnect_follow">The phone stops receiving the glucose and its access code is revoked.</string>
+    <string name="srv_disconnect_upload">The phone stops uploading the glucose and its access code is revoked. The sensor connection continues and the readings stay on the phone.</string>
+
+    <!-- 70_diag_meter -->
+
+    <!-- Diagnostics -->
+    <string name="diag_title">Diagnostics</string>
+    <string name="diag_status">Status</string>
+    <string name="diag_link">Connection</string>
+    <string name="diag_collection">Data collection</string>
+    <string name="diag_on">on</string>
+    <string name="diag_off">off</string>
+    <string name="diag_code">Pairing code</string>
+    <string name="diag_code_unset">not set</string>
+    <string name="diag_code_set">set (%1$d digits)</string>
+    <string name="diag_saved_sensor">Saved sensor</string>
+    <string name="diag_none">none</string>
+    <string name="diag_certificate">Certificate</string>
+    <string name="diag_configured">configured</string>
+    <string name="diag_not_configured">not configured</string>
+    <string name="diag_permissions">Bluetooth permissions</string>
+    <string name="diag_granted">granted</string>
+    <string name="diag_missing">missing</string>
+    <string name="diag_scanning">Scan in progress</string>
+    <string name="diag_since">Since</string>
+    <string name="diag_duration">%1$d min %2$d s</string>
+    <string name="diag_filtered">Results with the G7 filter</string>
+    <string name="diag_last">Last</string>
+    <string name="diag_last_value">%1$s (%2$s)</string>
+    <string name="diag_nearby">Nearby devices</string>
+    <string name="diag_grant">Grant the Bluetooth permissions to see the devices.</string>
+    <string name="diag_g7_advert">The G7 announces itself as DXCMxx for a few seconds, about every 5 minutes.</string>
+    <string name="diag_only_dexcom">Dexcom only</string>
+    <string name="diag_all">All (%1$d)</string>
+    <string name="diag_no_devices">No devices yet…</string>
+    <string name="diag_no_dexcom">No Dexcom seen so far (%1$d other devices)</string>
+    <string name="diag_hide_log">Hide event log</string>
+    <string name="diag_show_log">Show event log (%1$d)</string>
+    <string name="diag_log">Event log</string>
+    <string name="diag_log_copied">Log copied</string>
+    <string name="diag_copy_log">Copy log</string>
+    <string name="diag_clear_log">Clear log</string>
+    <string name="diag_no_events">No events.</string>
+    <string name="diag_newest_first">Newest on top</string>
+    <string name="diag_bt_on">on</string>
+    <string name="diag_bt_off">off</string>
+    <string name="diag_bonded_dexcom">Dexcom paired with Android</string>
+    <string name="diag_no_name">(no name)</string>
+    <string name="diag_dexcom_service">%1$s  · Dexcom service</string>
+    <string name="diag_seen_ago">%1$ds ago · %2$d×</string>
+
+    <!-- Glucose meter -->
+    <string name="meter_title">Glucose meter</string>
+    <string name="meter_explain">Works with Bluetooth glucose meters that use the standard \"Glucose\" profile: Contour Next One, Accu-Chek Guide and Instant, OneTouch Verio Flex and Select Plus Flex, CareSens and others. Meter measurements stay separate from the sensor ones and do not set off alarms.</string>
+    <string name="meter_pair_title">Pair a glucose meter</string>
+    <string name="meter_pair_steps">1. Put the meter in pairing mode (usually from the menu Settings → Bluetooth / Wireless → Pair; on the Contour Next One hold OK until the Bluetooth symbol flashes).\n2. Tap Search and choose the meter.\n3. Enter the PIN shown on the meter\'s display.</string>
+    <string name="meter_searching">Searching…</string>
+    <string name="meter_stop">Stop</string>
+    <string name="meter_search">Search</string>
+    <string name="meter_pair">Pair</string>
+    <string name="meter_not_found">If the meter does not appear, check that it is in pairing mode and close to the phone.</string>
+    <string name="meter_paired">Paired</string>
+    <string name="meter_service_off">Service stopped: start it from the settings to receive the measurements</string>
+    <string name="meter_last_sync">Last connection: %1$s</string>
+    <string name="meter_auto">After every measurement the meter sends the result to the phone by itself, within a few seconds. The measurements are uploaded to the server, if set up.</string>
+    <string name="meter_forget">Forget glucose meter</string>
+    <string name="meter_recent">Latest measurements</string>
+    <string name="meter_none_7d">No measurements in the last 7 days</string>
+    <string name="meter_forget_title">Forget the glucose meter?</string>
+    <string name="meter_forget_text">The phone stops receiving its measurements. Those already received are kept.</string>
+
+    <!-- 80_collector -->
+
+    <!-- Sensor connection: status shown in the app -->
+    <string name="col_enter_code">Enter the sensor pairing code in the settings</string>
+    <string name="col_bluetooth_off">Bluetooth is off</string>
+    <string name="col_refuses_data">The sensor refuses the data: pairing again</string>
+    <string name="col_confirm_bond">Confirm the pairing if Android asks</string>
+    <string name="col_bond_refused">The sensor refused the pairing, retrying</string>
+    <string name="col_auth_failed_3">Authentication failed 3 times: check the pairing code</string>
+    <string name="col_auth_retry">Authentication failed, retrying</string>
+
+    <!-- Sensor connection: event log -->
+    <string name="log_state">status: %1$s</string>
+    <string name="log_use_bonded">using the G7 already paired with Android: %1$s</string>
+    <string name="log_error">error: %1$s: %2$s</string>
+    <string name="log_no_scanner">Bluetooth scanner not available</string>
+    <string name="log_scan_mac">scan started (only sensor %1$s)</string>
+    <string name="log_scan_any">scan started (FEBC service and DXCM name)</string>
+    <string name="log_no_name">(no name)</string>
+    <string name="log_ignored_other">ignored %1$s %2$s: not the paired sensor</string>
+    <string name="log_ignored_paused">ignored %1$s %2$s: paused after an error (retrying in a few minutes)</string>
+    <string name="log_found">FOUND %1$s %2$s rssi=%3$d</string>
+    <string name="log_scan_failed">scan failed, code %1$d</string>
+    <string name="log_scan_failed_often">scan failed, code %1$d (started too often)</string>
+    <string name="log_no_g7">no G7 seen in %1$d min, restarting the scan</string>
+    <string name="log_wait_auto">waiting for sensor %1$s (automatic reconnection)</string>
+    <string name="log_connecting">connecting to %1$s…</string>
+    <string name="log_connected">connected, discovering services</string>
+    <string name="log_data_drops">the sensor closed the connection after the data request (%1$d in a row)</string>
+    <string name="log_reset_bond">resetting the pairing with the sensor: removing the Bluetooth bond and the key</string>
+    <string name="log_bond_done">Bluetooth pairing completed</string>
+    <string name="log_bond_failed">Bluetooth pairing FAILED</string>
+    <string name="log_closed_after_bond">the sensor closed the connection after pairing: retrying at the next cycle</string>
+    <string name="log_authenticated">authenticated and paired (Android Bluetooth bond: %1$s)</string>
+    <string name="log_present">present</string>
+    <string name="log_absent">absent</string>
+    <string name="log_auth_failed">authentication failed on %1$s (attempt %2$d)</string>
+    <string name="log_request_glucose">requesting glucose</string>
+    <string name="log_request_failed">glucose request failed (attempt %1$d)</string>
+    <string name="log_glucose">glucose %1$d mg/dL, state %2$s, age %3$ds</string>
+
+    <!-- 90_background -->
+
+    <!-- Authentication -->
+    <string name="auth_log_result">sensor: authenticated=%1$s, bonded=%2$s, key %3$s</string>
+    <string name="auth_yes">yes</string>
+    <string name="auth_no">no</string>
+    <string name="auth_key_saved">saved</string>
+    <string name="auth_key_new">new (J-PAKE)</string>
+    <string name="auth_needs_certs">The sensor needs the certificates (keks) for the first pairing</string>
+    <string name="auth_cert_refused">Certificate refused by the sensor</string>
+    <string name="auth_key_changed">auth: the sensor no longer uses the saved key</string>
+
+    <!-- Server: shared -->
+    <string name="net_server_error">Server error</string>
+    <string name="net_server_error_code">Server error (%1$d)</string>
+    <string name="net_bad_certificate">The server\'s HTTPS certificate is not valid</string>
+    <string name="net_unreachable">Server unreachable</string>
+    <string name="net_unlinked_by_site">The site disconnected this phone: connect it again</string>
+    <string name="net_not_g7">There is no G7 Monitor server at this address</string>
+    <string name="net_retry_in">server: %1$s (retrying in %2$d min)</string>
+
+    <!-- Following -->
+    <string name="follow_no_live">server: live updates not available, using periodic requests</string>
+    <string name="follow_live">server: live connection</string>
+    <string name="follow_silent">server: no signal for %1$d min, reconnecting</string>
+    <string name="follow_fingersticks">server: received %1$d glucose meter measurements</string>
+    <string name="follow_readings">server: received %1$d readings</string>
+    <string name="follow_revoked">server: token revoked</string>
+    <string name="follow_unlinked">Phone disconnected from the server</string>
+
+    <!-- Uploading -->
+    <string name="upload_waiting_wifi">Waiting for Wi-Fi</string>
+    <string name="upload_no_connection">No connection</string>
+    <string name="upload_sent">server: sent %1$d readings</string>
+    <string name="upload_revoked">server: token revoked, phone disconnected</string>
+    <string name="upload_old_server">server: it does not know glucose meter measurements yet, update it</string>
+    <string name="upload_stick_refused">server: glucose meter measurement refused (%1$d mg/dL, %2$s): not sending it again</string>
+    <string name="upload_restored">server: restored %1$d readings from the last 24 hours</string>
+    <string name="upload_paused_log">server: uploads paused</string>
+    <string name="upload_resumed_log">server: uploads resumed</string>
+
+    <!-- App updates -->
+    <string name="upd_check_failed">Check failed: verify the connection</string>
+    <string name="upd_downloaded">update %1$s downloaded</string>
+    <string name="upd_download_log_failed">update not downloaded: %1$s: %2$s</string>
+    <string name="upd_download_failed">Download failed: try again</string>
+    <string name="upd_signature">The installed app has a different signature: uninstall it once and install the APK from the GitHub page</string>
+    <string name="upd_storage">Not enough space on the phone</string>
+    <string name="upd_install_failed">Installation failed</string>
+    <string name="upd_install_log_failed">update not installed: %1$d %2$s</string>
+
+    <!-- Glucose meter link -->
+    <string name="mc_waiting">Waiting for the glucose meter</string>
+    <string name="mc_downloading">Downloading the measurements…</string>
+    <string name="mc_error">error %1$s: %2$s</string>
+    <string name="mc_no_service">glucose service not found</string>
+    <string name="mc_refused">the meter refuses the data request: pairing missing?</string>
+    <string name="mc_bad_pairing">Invalid pairing: pair the glucose meter again</string>
+    <string name="mc_clock">glucose meter clock off by %1$d s: correcting the measurement times</string>
+    <string name="mc_paired">glucose meter paired: %1$s</string>
+
+    <!-- Other events -->
+    <string name="secret_unreadable">secret not readable (%1$s): it must be entered again</string>
+    <string name="keepalive_restart">service not running: restarting it</string>
+    <string name="keepalive_refused">restart not allowed: %1$s</string>
+    <string name="alarms_resumed_expired">alarms back on: pause expired</string>
+    <string name="alarm_snoozed_log">alarm snoozed: %1$s for %2$d min</string>
+    <string name="alarms_resumed_log">alarms back on</string>
+    <string name="alarms_paused_log">alarms paused</string>
+    <string name="alarm_test_log">alarm test: %1$s</string>
+    <string name="alarm_fired_log">ALARM: %1$s — %2$s</string>
+    <string name="diag_scan_failed">diagnostic scan failed, code %1$d</string>
+    <string name="service_not_started">service not started: %1$s: %2$s</string>
+    <string name="mc_log">glucose meter: %1$s</string>
 </resources>

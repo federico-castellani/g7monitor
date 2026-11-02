@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /** A version published on GitHub. */
 data class AppRelease(val version: String, val code: Int, val apkUrl: String, val size: Long, val notes: String)
@@ -67,7 +69,7 @@ class AppUpdater(private val app: G7App) {
             }
         } catch (e: Exception) {
             DebugLog.log("aggiornamenti: ${e.javaClass.simpleName}: ${e.message}")
-            if (force) UpdateState.Failed("Controllo non riuscito: verifica la connessione", null) else UpdateState.Idle
+            if (force) UpdateState.Failed(str(R.string.upd_check_failed), null) else UpdateState.Idle
         }
     }
 
@@ -98,11 +100,11 @@ class AppUpdater(private val app: G7App) {
                 }
             }
             _state.value = UpdateState.Installing(release)
-            DebugLog.log("aggiornamento ${release.version} scaricato")
+            DebugLog.log(str(R.string.upd_downloaded, release.version))
         } catch (e: Exception) {
             if (sessionId != -1) runCatching { installer.abandonSession(sessionId) }
-            DebugLog.log("aggiornamento non scaricato: ${e.javaClass.simpleName}: ${e.message}")
-            _state.value = UpdateState.Failed("Download non riuscito: riprova", release)
+            DebugLog.log(str(R.string.upd_download_log_failed, e.javaClass.simpleName, e.message))
+            _state.value = UpdateState.Failed(str(R.string.upd_download_failed), release)
         }
     }
 
@@ -121,11 +123,11 @@ class AppUpdater(private val app: G7App) {
             else -> {
                 val message = when (status) {
                     PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
-                        "L'app installata ha una firma diversa: disinstallala una volta e installa l'APK dalla pagina GitHub"
-                    PackageInstaller.STATUS_FAILURE_STORAGE -> "Spazio insufficiente sul telefono"
-                    else -> "Installazione non riuscita"
+                        str(R.string.upd_signature)
+                    PackageInstaller.STATUS_FAILURE_STORAGE -> str(R.string.upd_storage)
+                    else -> str(R.string.upd_install_failed)
                 }
-                DebugLog.log("aggiornamento non installato: $status ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)}")
+                DebugLog.log(str(R.string.upd_install_log_failed, status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)))
                 _state.value = UpdateState.Failed(message, release)
             }
         }

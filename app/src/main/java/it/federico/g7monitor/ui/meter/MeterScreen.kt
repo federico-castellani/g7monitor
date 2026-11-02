@@ -52,6 +52,8 @@ import it.federico.g7monitor.ui.theme.LocalRangeColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
 
 class MeterActions(
     /** @return an error to show, or null */
@@ -76,8 +78,8 @@ fun MeterScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Glucometro") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") } },
+                title = { Text(stringResource(R.string.meter_title)) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
             )
         },
     ) { padding ->
@@ -91,9 +93,7 @@ fun MeterScreen(
                 Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    "Funziona con i glucometri Bluetooth che usano il profilo standard \"Glucose\": Contour Next One, " +
-                        "Accu-Chek Guide e Instant, OneTouch Verio Flex e Select Plus Flex, CareSens e altri. " +
-                        "Le misurazioni del glucometro restano separate da quelle del sensore e non fanno scattare gli allarmi.",
+                    stringResource(R.string.meter_explain),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -108,23 +108,20 @@ private fun Pairing(scanning: Boolean, found: List<FoundMeter>, actions: MeterAc
     var error by remember { mutableStateOf<String?>(null) }
     var pairing by remember { mutableStateOf<String?>(null) }
 
-    SectionCard("Abbina un glucometro", Icons.AutoMirrored.Outlined.BluetoothSearching) {
+    SectionCard(stringResource(R.string.meter_pair_title), Icons.AutoMirrored.Outlined.BluetoothSearching) {
         Text(
-            "1. Metti il glucometro in modalità abbinamento (di solito dal menu Impostazioni → Bluetooth / Wireless → Associa; " +
-                "sul Contour Next One tieni premuto OK finché lampeggia il simbolo Bluetooth).\n" +
-                "2. Tocca Cerca e scegli il glucometro.\n" +
-                "3. Inserisci il PIN che compare sul display del glucometro.",
+            stringResource(R.string.meter_pair_steps),
             style = MaterialTheme.typography.bodyMedium,
         )
         if (scanning) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(10.dp))
-                Text("Ricerca in corso…", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = actions.onStopScan) { Text("Ferma") }
+                Text(stringResource(R.string.meter_searching), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = actions.onStopScan) { Text(stringResource(R.string.meter_stop)) }
             }
         } else {
-            Button(onClick = { error = actions.onScan() }) { Text("Cerca") }
+            Button(onClick = { error = actions.onScan() }) { Text(stringResource(R.string.meter_search)) }
         }
         found.forEach { m ->
             HorizontalDivider()
@@ -132,7 +129,7 @@ private fun Pairing(scanning: Boolean, found: List<FoundMeter>, actions: MeterAc
                 Icon(Icons.Outlined.WaterDrop, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(m.name ?: "Glucometro", style = MaterialTheme.typography.bodyLarge)
+                    Text(m.name ?: stringResource(R.string.meter_title), style = MaterialTheme.typography.bodyLarge)
                     Text(m.address, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 if (pairing == m.address) {
@@ -145,13 +142,13 @@ private fun Pairing(scanning: Boolean, found: List<FoundMeter>, actions: MeterAc
                             pairing = null
                             error = e
                         }
-                    }, enabled = pairing == null) { Text("Abbina") }
+                    }, enabled = pairing == null) { Text(stringResource(R.string.meter_pair)) }
                 }
             }
         }
         if (!scanning && found.isEmpty()) {
             Text(
-                "Se il glucometro non compare, controlla che sia in modalità abbinamento e vicino al telefono.",
+                stringResource(R.string.meter_not_found),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -162,21 +159,20 @@ private fun Pairing(scanning: Boolean, found: List<FoundMeter>, actions: MeterAc
 @Composable
 private fun Paired(settings: AppSettings, status: String, serviceRunning: Boolean, recent: List<Fingerstick>, actions: MeterActions) {
     var confirmForget by remember { mutableStateOf(false) }
-    val fmt = remember { SimpleDateFormat("d MMM HH:mm", Locale.ITALY) }
+    val fmt = remember { SimpleDateFormat("d MMM HH:mm", Locale.getDefault()) }
 
-    SectionCard(settings.meterName ?: "Glucometro", Icons.Outlined.WaterDrop) {
+    SectionCard(settings.meterName ?: stringResource(R.string.meter_title), Icons.Outlined.WaterDrop) {
         SettingRow(
-            Icons.Outlined.CheckCircle, "Abbinato", settings.meterMac,
+            Icons.Outlined.CheckCircle, stringResource(R.string.meter_paired), settings.meterMac,
             iconTint = LocalRangeColors.current.inRange,
         )
         SettingRow(
             Icons.Outlined.Schedule,
-            if (serviceRunning) status else "Servizio fermo: avvialo dalle impostazioni per ricevere le misurazioni",
-            settings.meterLastSync?.let { "Ultimo collegamento: ${fmt.format(Date(it))}" },
+            if (serviceRunning) status else stringResource(R.string.meter_service_off),
+            settings.meterLastSync?.let { stringResource(R.string.meter_last_sync, fmt.format(Date(it))) },
         )
         Text(
-            "Dopo ogni misurazione il glucometro invia il risultato al telefono da solo, entro pochi secondi. " +
-                "Le misurazioni vengono caricate sul server, se configurato.",
+            stringResource(R.string.meter_auto),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -186,13 +182,13 @@ private fun Paired(settings: AppSettings, status: String, serviceRunning: Boolea
         ) {
             Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Dimentica glucometro")
+            Text(stringResource(R.string.meter_forget))
         }
     }
 
-    SectionCard("Ultime misurazioni", Icons.Outlined.Schedule) {
+    SectionCard(stringResource(R.string.meter_recent), Icons.Outlined.Schedule) {
         if (recent.isEmpty()) {
-            Text("Nessuna misurazione negli ultimi 7 giorni", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.meter_none_7d), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         recent.take(15).forEach { f ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -208,10 +204,10 @@ private fun Paired(settings: AppSettings, status: String, serviceRunning: Boolea
     if (confirmForget) {
         AlertDialog(
             onDismissRequest = { confirmForget = false },
-            title = { Text("Dimenticare il glucometro?") },
-            text = { Text("Il telefono smette di ricevere le sue misurazioni. Quelle già ricevute restano.") },
-            confirmButton = { TextButton(onClick = { confirmForget = false; actions.onForget() }) { Text("Dimentica") } },
-            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Annulla") } },
+            title = { Text(stringResource(R.string.meter_forget_title)) },
+            text = { Text(stringResource(R.string.meter_forget_text)) },
+            confirmButton = { TextButton(onClick = { confirmForget = false; actions.onForget() }) { Text(stringResource(R.string.sensor_forget_confirm)) } },
+            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }

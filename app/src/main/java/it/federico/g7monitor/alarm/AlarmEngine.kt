@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import it.federico.g7monitor.str
 
 /** The alarm on screen / ringing now. */
 /** @param test started from the settings ("Prova"): never snoozes nor hides a real alarm. */
@@ -55,7 +56,7 @@ class AlarmEngine(private val app: G7App) {
         }
         if (pausedUntil != null) {
             app.alarmSettings.setPausedUntil(null)
-            DebugLog.log("allarmi riattivati: sospensione scaduta")
+            DebugLog.log(str(R.string.alarms_resumed_expired))
         }
 
         val recent = app.readings.since(now - 30 * 60_000L)
@@ -88,7 +89,7 @@ class AlarmEngine(private val app: G7App) {
         }
         val minutes = _active.value?.takeIf { it.type == type }?.snoozeMin ?: type.snoozeMin
         snoozedUntil[type] = System.currentTimeMillis() + minutes * 60_000L
-        DebugLog.log("allarme posticipato: ${type.title} per $minutes min")
+        DebugLog.log(str(R.string.alarm_snoozed_log, type.title, minutes))
         if (_active.value?.type == type) clear()
     }
 
@@ -99,7 +100,7 @@ class AlarmEngine(private val app: G7App) {
     suspend fun pause(until: Long?) {
         app.alarmSettings.setPausedUntil(until)
         if (until == null) app.getSystemService(AlarmManager::class.java).cancel(checkIntent(RESUME_CHECK))
-        DebugLog.log(if (until == null) "allarmi riattivati" else "allarmi sospesi")
+        DebugLog.log(str(if (until == null) R.string.alarms_resumed_log else R.string.alarms_paused_log))
         evaluate()
     }
 
@@ -112,9 +113,9 @@ class AlarmEngine(private val app: G7App) {
      */
     fun test(config: AlarmConfig) {
         if (_active.value?.test == false) return // a real alarm is ringing: never cover it
-        val text = "PROVA · nessun valore reale"
+        val text = str(R.string.alarm_test_text)
         _active.value = ActiveAlarm(config.type, text, System.currentTimeMillis(), config.snoozeMin, test = true)
-        DebugLog.log("prova allarme: ${config.type.title}")
+        DebugLog.log(str(R.string.alarm_test_log, config.type.title))
         player.start(config, TEST_RING_MS)
         notifyAlarm(config, text)
     }
@@ -138,14 +139,14 @@ class AlarmEngine(private val app: G7App) {
 
     private fun fire(config: AlarmConfig, latest: GlucoseReading?, newest: Long?, now: Long, mmol: Boolean) {
         val text = when (config.type) {
-            AlarmType.SignalLoss -> "Nessuna lettura da ${newest?.let { (now - it) / 60_000L } ?: "?"} minuti"
+            AlarmType.SignalLoss -> str(R.string.alarm_no_reading_for, newest?.let { ((now - it) / 60_000L).toString() } ?: "?")
             else -> latest?.let {
                 "${Glucose.format(it.mgdl, mmol)} ${Glucose.unit(mmol)} ${Glucose.arrow(it.trend)}".trim()
             } ?: ""
         }
         lastAlertAt[config.type] = now
         _active.value = ActiveAlarm(config.type, text, now, config.snoozeMin)
-        DebugLog.log("ALLARME: ${config.type.title} — $text")
+        DebugLog.log(str(R.string.alarm_fired_log, config.type.title, text))
         player.start(config, RING_MS)
         notifyAlarm(config, text)
     }
@@ -174,13 +175,12 @@ class AlarmEngine(private val app: G7App) {
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .setBigContentTitle(config.type.title)
-                    .bigText(
-                        "$text\n\nPosticipa per silenziarlo ${config.snoozeMin} minuti. " +
-                            "Se non lo posticipi risuona a ogni nuova lettura finché la condizione resta vera.",
-                    )
+                    .bigText(str(R.string.alarm_notification_text, text, config.snoozeMin))
             )
             // Own group: never bundled with the status notification (a closed bundle hides the buttons).
             .setGroup(GROUP_ALARM)
+            // The watch gets its own alarm, with a working "Posticipa" (WatchSync.sendAlarm).
+            .setLocalOnly(true)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -191,7 +191,7 @@ class AlarmEngine(private val app: G7App) {
             .setFullScreenIntent(open, true)
             // Android 14+ lets the user swipe even "ongoing" notifications away: that silences it like "Posticipa".
             .setDeleteIntent(snooze)
-            .addAction(R.drawable.ic_notification, "Posticipa ${config.snoozeMin} min", snooze)
+            .addAction(R.drawable.ic_notification, str(R.string.alarm_snooze_min, config.snoozeMin), snooze)
             .build()
         app.getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
     }

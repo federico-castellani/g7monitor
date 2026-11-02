@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import it.federico.g7monitor.str
 
 /**
  * Foreground service that keeps the readings coming with the screen off:
@@ -62,16 +63,17 @@ class G7Service : LifecycleService() {
         KeepAlive.schedule(this)
 
         lifecycleScope.launch {
-            val display = app.settings.settings.map { Triple(it.useMmol, it.lowMgdl, it.highMgdl) }.distinctUntilChanged()
+            val display = app.settings.settings
+                .map { Display(it.useMmol, it.lowMgdl, it.highMgdl, it.statusBarNumber) }.distinctUntilChanged()
             var watchdogFor: Long? = null
-            combine(app.status, app.readings.changes, display) { st, _, (mmol, low, high) ->
-                val text = st.message ?: st.sensorState?.label?.let { "Sensore: $it" } ?: st.link.label
-                text to GlucoseNotification.load(app, text, mmol, low, high, maxAgeMs = 30 * 60_000L)
+            combine(app.status, app.readings.changes, display) { st, _, (mmol, low, high, number) ->
+                val text = st.message ?: st.sensorState?.label?.let { str(R.string.service_sensor_state, it) } ?: st.link.label
+                text to GlucoseNotification.load(app, text, mmol, low, high, maxAgeMs = 30 * 60_000L)?.copy(numberIcon = number)
             }
                 // Status changes often during a cycle: only touch the notification when what it shows changes.
                 .distinctUntilChanged()
                 .collect { (text, data) ->
-                    val n = if (data != null) buildGlucoseNotification(data) else buildNotification("Nessuna lettura recente", text)
+                    val n = if (data != null) buildGlucoseNotification(data) else buildNotification(str(R.string.service_no_recent), text)
                     getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, n)
                     val readingTime = data?.latest?.timestamp
                     if (mode == DataSource.Sensor && readingTime != null && readingTime != watchdogFor) {
@@ -94,14 +96,14 @@ class G7Service : LifecycleService() {
             else -> 0
         }
         try {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification("Avvio…", null), type)
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(str(R.string.service_starting_short), null), type)
         } catch (e: RuntimeException) {
             // e.g. Bluetooth permission missing or revoked (Android 14+ requires it for this service type),
             // or a start from the background that Android refuses: report it instead of crashing.
-            DebugLog.log("servizio non avviato: ${e.javaClass.simpleName}: ${e.message}")
+            DebugLog.log(str(R.string.service_not_started, e.javaClass.simpleName, e.message))
             app.status.value = SensorStatus(
                 link = Link.Error,
-                message = if (mode == DataSource.Sensor) "Servono i permessi Bluetooth: riattiva la raccolta dati" else "Avvio non consentito da Android",
+                message = str(if (mode == DataSource.Sensor) R.string.service_needs_bluetooth else R.string.service_start_refused),
             )
             refused = true
             _running.value = false
@@ -175,7 +177,11 @@ class G7Service : LifecycleService() {
     /** Value coloured by range, trend and chart (collapsed: sparkline; expanded: 3-hour chart). */
     private fun buildGlucoseNotification(d: GlucoseNotificationData): Notification =
         NotificationCompat.Builder(this, G7App.CHANNEL_STATUS)
-            .setSmallIcon(R.drawable.ic_notification)
+            .apply {
+                val fresh = System.currentTimeMillis() - d.latest.timestamp <= GlucoseNotification.STALE_MS
+                if (d.numberIcon && fresh) setSmallIcon(GlucoseNotification.numberIcon(this@G7Service, Glucose.format(d.latest.mgdl, d.mmol)))
+                else setSmallIcon(R.drawable.ic_notification)
+            }
             // plain text too: shown where custom layouts are not (some lock screens, watches)
             .setContentTitle("${Glucose.format(d.latest.mgdl, d.mmol)} ${Glucose.unit(d.mmol)} ${Glucose.arrow(d.latest.trend)}")
             .setContentText(d.status)
@@ -276,3 +282,6 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 }
+
+/** What of the settings the status notification depends on. */
+private data class Display(val mmol: Boolean, val low: Int, val high: Int, val numberIcon: Boolean)

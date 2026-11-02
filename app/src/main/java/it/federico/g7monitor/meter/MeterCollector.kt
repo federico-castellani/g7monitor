@@ -21,6 +21,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Waits for the paired blood glucose meter and imports its new measurements.
@@ -34,7 +36,7 @@ class MeterCollector(private val context: Context, private val scope: CoroutineS
     private val app get() = G7App.instance
     private var job: Job? = null
 
-    private fun log(msg: String) = DebugLog.log("glucometro: $msg")
+    private fun log(msg: String) = DebugLog.log(str(R.string.mc_log, msg))
 
     private fun status(text: String) {
         app.meterStatus.value = text
@@ -48,7 +50,7 @@ class MeterCollector(private val context: Context, private val scope: CoroutineS
     fun stop() {
         job?.cancel()
         job = null
-        status("Fermo")
+        status(str(R.string.meter_stopped))
     }
 
     private suspend fun loop() {
@@ -63,15 +65,15 @@ class MeterCollector(private val context: Context, private val scope: CoroutineS
             val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: return
             val client = GattClient(context, adapter.getRemoteDevice(mac), GlucoseProfile.GLUCOSE_SERVICE) { log(it) }
             try {
-                status("In attesa del glucometro")
+                status(str(R.string.mc_waiting))
                 if (connectUnlessUnpaired(client, mac)) {
-                    status("Scarico le misurazioni…")
+                    status(str(R.string.mc_downloading))
                     sync(client, app.settings.current())
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                log("errore ${e.javaClass.simpleName}: ${e.message}")
+                log(str(R.string.mc_error, e.javaClass.simpleName, e.message))
             } finally {
                 client.disconnect()
                 client.close()
@@ -95,7 +97,7 @@ class MeterCollector(private val context: Context, private val scope: CoroutineS
 
     private suspend fun sync(client: GattClient, s: AppSettings) {
         if (!client.discover() || client.characteristic(GlucoseProfile.MEASUREMENT) == null) {
-            log("servizio glicemia non trovato")
+            log(str(R.string.mc_no_service))
             return
         }
         client.enable(GlucoseProfile.MEASUREMENT, indication = false)
@@ -103,8 +105,8 @@ class MeterCollector(private val context: Context, private val scope: CoroutineS
             client.enable(GlucoseProfile.MEASUREMENT_CONTEXT, indication = false)
         }
         if (!client.enable(GlucoseProfile.RACP, indication = true)) {
-            log("il glucometro rifiuta la richiesta dei dati: abbinamento mancante?")
-            status("Abbinamento non valido: abbina di nuovo il glucometro")
+            log(str(R.string.mc_refused))
+            status(str(R.string.mc_bad_pairing))
             return
         }
         val clockError = clockError(client)
@@ -152,7 +154,7 @@ class MeterCollector(private val context: Context, private val scope: CoroutineS
         if (client.characteristic(GlucoseProfile.CURRENT_TIME) == null) return 0
         val meterTime = client.read(GlucoseProfile.CURRENT_TIME)?.let { GlucoseProfile.parseCurrentTime(it) } ?: return 0
         val error = meterTime - System.currentTimeMillis()
-        if (abs(error) >= 60_000) log("orologio del glucometro sbagliato di ${error / 1000} s: correggo gli orari delle misurazioni")
+        if (abs(error) >= 60_000) log(str(R.string.mc_clock, (error / 1000).toInt()))
         return error
     }
 

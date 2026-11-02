@@ -72,6 +72,7 @@ import it.federico.g7monitor.ui.settings.UpdateInfo
 import it.federico.g7monitor.ui.update.UpdateActions
 import it.federico.g7monitor.ui.theme.G7Theme
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
 
 private enum class Screen(val page: SettingsPage? = null) {
     Home, Alarms, Settings,
@@ -165,7 +166,7 @@ class MainActivity : ComponentActivity() {
                     ActivityResultContracts.RequestMultiplePermissions()
                 ) {
                     if (hasBluetoothPermissions()) vm.setCollector(true)
-                    else Toast.makeText(this, "Servono i permessi Bluetooth per collegarsi al sensore", Toast.LENGTH_LONG).show()
+                    else Toast.makeText(this, R.string.main_needs_bluetooth, Toast.LENGTH_LONG).show()
                 }
                 // Server mode needs no Bluetooth: only the (optional) notification permission.
                 val notificationLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -175,7 +176,7 @@ class MainActivity : ComponentActivity() {
                     when {
                         // Stopping the service also silences the alarms: same protection as turning one off.
                         !on && alarmConfigs.values.any { it.enabled } -> DeviceAuth.confirm(
-                            this, "Fermare il servizio?", "Anche gli allarmi smetteranno di funzionare",
+                            this, getString(R.string.main_stop_service_title), getString(R.string.main_stop_service_text),
                         ) { ok, error ->
                             if (ok) vm.setCollector(false)
                             else if (error != null) Toast.makeText(this, error, Toast.LENGTH_LONG).show()
@@ -192,7 +193,9 @@ class MainActivity : ComponentActivity() {
                 /** Pausing all alarms needs the screen lock, like turning one off; resuming is free. */
                 val pauseAlarms: (Long?) -> Unit = { until ->
                     if (until == null) vm.pauseAlarms(null)
-                    else DeviceAuth.confirm(this, "Sospendere tutti gli allarmi?", "Conferma con lo sblocco del telefono") { ok, error ->
+                    else DeviceAuth.confirm(
+                        this, getString(R.string.main_pause_alarms_title), getString(R.string.main_confirm_unlock),
+                    ) { ok, error ->
                         if (ok) vm.pauseAlarms(until)
                         else if (error != null) Toast.makeText(this, error, Toast.LENGTH_LONG).show()
                     }
@@ -202,7 +205,7 @@ class MainActivity : ComponentActivity() {
                         vm.saveAlarm(config.copy(enabled = true))
                     } else {
                         DeviceAuth.confirm(
-                            this, "Disattivare l'allarme?", "${config.type.title}: conferma con lo sblocco del telefono",
+                            this, getString(R.string.main_disable_alarm_title), getString(R.string.main_disable_alarm_text, config.type.title),
                         ) { ok, error ->
                             if (ok) vm.saveAlarm(config.copy(enabled = false))
                             else if (error != null) Toast.makeText(this, error, Toast.LENGTH_LONG).show()
@@ -235,7 +238,7 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(
                                 selected = tab == Screen.Home, onClick = { selectTab(Screen.Home) },
                                 icon = { Icon(Icons.AutoMirrored.Outlined.ShowChart, contentDescription = null) },
-                                label = { Text("Glicemia") },
+                                label = { Text(stringResource(R.string.tab_glucose)) },
                             )
                             NavigationBarItem(
                                 selected = tab == Screen.Alarms, onClick = { selectTab(Screen.Alarms) },
@@ -247,12 +250,12 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 },
-                                label = { Text("Allarmi") },
+                                label = { Text(stringResource(R.string.tab_alarms)) },
                             )
                             NavigationBarItem(
                                 selected = tab == Screen.Settings, onClick = { selectTab(Screen.Settings) },
                                 icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-                                label = { Text("Impostazioni") },
+                                label = { Text(stringResource(R.string.tab_settings)) },
                             )
                         }
                     },
@@ -316,7 +319,7 @@ class MainActivity : ComponentActivity() {
                                             soundPicker.launch(
                                                 Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
                                                     .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM or RingtoneManager.TYPE_NOTIFICATION or RingtoneManager.TYPE_RINGTONE)
-                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Suono per \"${config.type.title}\"")
+                                                    .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, getString(R.string.main_sound_for, config.type.title))
                                                     .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
                                                     .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
                                                     .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, if (config.builtInSound == null) Uri.parse(config.sound) else null),

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Italiano -->
+<resources>
+
+    <!-- 10_wear -->
+
+    <!-- Complications (names in the watch face picker) -->
+    <string name="complication_glucose">Glicemia</string>
+    <string name="complication_delta">Glicemia: variazione</string>
+    <string name="complication_age">Glicemia: ultima lettura</string>
+
+    <!-- Complication descriptions (screen readers) -->
+    <string name="c_not_updated">Glicemia non aggiornata</string>
+    <string name="c_glucose">Glicemia %1$s %2$s %3$s</string>
+    <string name="c_ago">^1 fa</string>
+    <string name="c_delta">Variazione %1$s %2$s</string>
+    <string name="c_delta_none">Variazione non disponibile</string>
+    <string name="c_age">Tempo dall\'ultima lettura</string>
+
+    <!-- Watch app -->
+    <string name="w_update_to">Aggiorna a %1$s</string>
+    <string name="w_downloading">Download %1$d%%</string>
+    <string name="w_confirm_install">Conferma l\'installazione</string>
+    <string name="w_waiting">In attesa delle glicemie dal telefono.\nApri G7 Monitor sul telefono.</string>
+    <string name="w_now">adesso</string>
+    <string name="w_no_reading_for">nessuna lettura da %1$d min</string>
+    <string name="w_min_ago">%1$d min fa</string>
+
+    <!-- Watch updates -->
+    <string name="w_check_failed">Controllo non riuscito: l\'orologio è collegato a internet?</string>
+    <string name="w_download_failed">Download non riuscito: riprova</string>
+    <string name="w_signature">Firma diversa: reinstalla una volta l\'app dell\'orologio con lo script</string>
+    <string name="w_install_failed">Installazione non riuscita</string>
+    <string name="w_channel_updates">Aggiornamenti</string>
+    <string name="w_update_title">Aggiorna G7 Monitor</string>
+    <string name="w_update_text">Il telefono ha la versione %1$s: tocca per aggiornare l\'orologio</string>
+
+    <!-- Alarms from the phone -->
+    <string name="w_channel_alarms">Allarmi glicemia</string>
+    <string name="w_snooze">Posticipa %1$d min</string>
+</resources>

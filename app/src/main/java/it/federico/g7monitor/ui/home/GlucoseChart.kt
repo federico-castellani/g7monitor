@@ -37,6 +37,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Glucose chart drawn directly on a Canvas: target band, gridlines, points coloured
@@ -67,7 +69,7 @@ fun GlucoseChart(
     val tipStyle = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = scheme.onSurface)
     val tipDetailStyle = TextStyle(fontSize = 12.sp, color = scheme.onSurfaceVariant)
     val meterLabelStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = scheme.surface)
-    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.ITALY) }
+    val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     var touchX by remember { mutableStateOf<Float?>(null) }
 
     Canvas(
@@ -219,12 +221,12 @@ fun GlucoseChart(
             drawPath(diamond(px, py, half * 1.35f + 2.5.dp.toPx()), scheme.surface)
             drawPath(diamond(px, py, half * 1.35f), range.meter)
             val title = measurer.measure(
-                "Glucometro ${Glucose.format(stick.mgdl, mmol)} · ${timeFmt.format(Date(stick.timestamp))}", tipStyle,
+                str(R.string.chart_tip_meter, Glucose.format(stick.mgdl, mmol), timeFmt.format(Date(stick.timestamp))), tipStyle,
             )
             val sensor = Glucose.sensorAt(readings, stick.timestamp)
             val detail = measurer.measure(
-                sensor?.let { "Sensore ${Glucose.format(it, mmol)} · differenza ${Glucose.formatDifference(stick.mgdl, it, mmol)}" }
-                    ?: "Nessuna lettura del sensore in quel momento",
+                sensor?.let { str(R.string.chart_tip_sensor, Glucose.format(it, mmol), Glucose.formatDifference(stick.mgdl, it, mmol)) }
+                    ?: str(R.string.chart_tip_no_sensor),
                 tipDetailStyle,
             )
             val pad = 8.dp.toPx()

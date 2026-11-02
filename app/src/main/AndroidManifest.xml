@@ -73,6 +73,19 @@
             android:name=".alarm.AlarmReceiver"
             android:exported="false" />
 
+        <!-- "Posticipa" pressed on the watch -->
+        <service
+            android:name=".watch.WatchListenerService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:path="/g7monitor/alarm-snooze"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".update.UpdateReceiver"
             android:exported="false" />

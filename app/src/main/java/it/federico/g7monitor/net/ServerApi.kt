@@ -10,6 +10,8 @@ import java.net.URI
 import java.net.URL
 import java.util.zip.GZIPOutputStream
 import kotlin.math.roundToInt
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /**
  * Client for the G7 Monitor server. Plain HttpURLConnection (no extra libraries);
@@ -44,7 +46,7 @@ object ServerApi {
         if (json.optString("service") != "g7monitor") throw NotG7Server()
     }
 
-    class NotG7Server : IOException("A questo indirizzo non c'è un server G7 Monitor")
+    class NotG7Server : IOException(str(R.string.net_not_g7))
 
     /**
      * Sends the credentials once; only the returned token is stored on the phone.
@@ -106,7 +108,7 @@ object ServerApi {
             val text = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
             conn.disconnect()
             val err = runCatching { JSONObject(text) }.getOrNull()
-            throw HttpError(status, err?.optString("error"), err?.optString("message")?.takeIf { it.isNotBlank() } ?: "Errore del server ($status)")
+            throw HttpError(status, err?.optString("error"), err?.optString("message")?.takeIf { it.isNotBlank() } ?: str(R.string.net_server_error_code, status))
         }
         return conn
     }
@@ -201,7 +203,7 @@ object ServerApi {
         val text = (if (status < 400) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
         if (status !in 200..299) {
             val err = runCatching { JSONObject(text) }.getOrNull()
-            val message = err?.optString("message")?.takeIf { it.isNotBlank() } ?: "Errore del server ($status)"
+            val message = err?.optString("message")?.takeIf { it.isNotBlank() } ?: str(R.string.net_server_error_code, status)
             throw HttpError(status, err?.optString("error"), message)
         }
         return text

@@ -46,7 +46,7 @@ class G7App : Application() {
     val status = MutableStateFlow(SensorStatus())
 
     /** Blood glucose meter link, shown in its settings page. */
-    val meterStatus = MutableStateFlow("Fermo")
+    val meterStatus = MutableStateFlow("")
 
     /** Work that lives as long as the process (alarm checks). */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -54,6 +54,7 @@ class G7App : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        meterStatus.value = getString(R.string.meter_stopped)
         readings = ReadingStore(this)
         settings = SettingsRepository(this)
         uploader = Uploader(this)
@@ -67,14 +68,14 @@ class G7App : Application() {
         updater = AppUpdater(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_STATUS, "Glicemia in corso", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Mostra l'ultima glicemia e lo stato del sensore"
+            NotificationChannel(CHANNEL_STATUS, getString(R.string.channel_status), NotificationManager.IMPORTANCE_LOW).apply {
+                description = getString(R.string.channel_status_text)
                 setShowBadge(false)
             }
         )
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ALARMS, "Allarmi glicemia", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Glicemia bassa o alta, variazioni rapide, mancanza di segnale"
+            NotificationChannel(CHANNEL_ALARMS, getString(R.string.channel_alarms), NotificationManager.IMPORTANCE_HIGH).apply {
+                description = getString(R.string.channel_alarms_text)
                 // Sound and vibration are played by the app on the alarm stream, with the user's choices.
                 setSound(null, null)
                 enableVibration(false)
@@ -83,6 +84,8 @@ class G7App : Application() {
         )
         // Every new reading, from the sensor or from the server, is checked against the alarms.
         scope.launch { readings.changes.collect { alarms.evaluate() } }
+        // The ringing alarm goes to the watch too (and away from it when it stops).
+        scope.launch { alarms.active.collect { watch.sendAlarm(it) } }
         // ...and sent to the watch complications (again when unit or target range change).
         val display = settings.settings.map { Triple(it.useMmol, it.lowMgdl, it.highMgdl) }.distinctUntilChanged()
         scope.launch { combine(readings.changes, display) { _, _ -> }.collect { watch.push() } }
@@ -95,5 +98,8 @@ class G7App : Application() {
         const val CHANNEL_ALARMS = "alarms"
         lateinit var instance: G7App
             private set
+
+        /** False in JVM unit tests, where no Application is created. */
+        val ready: Boolean get() = this::instance.isInitialized
     }
 }

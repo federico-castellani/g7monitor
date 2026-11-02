@@ -96,6 +96,13 @@ import it.federico.g7monitor.ui.update.UpdateActions
 import it.federico.g7monitor.ui.update.UpdatesPanel
 import it.federico.g7monitor.ui.update.updateSummary
 import it.federico.g7monitor.update.UpdateState
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
+import androidx.annotation.StringRes
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.runtime.rememberCoroutineScope
+import it.federico.g7monitor.G7App
+import kotlinx.coroutines.launch
 
 class SettingsActions(
     val onPairingCode: (String) -> Unit,
@@ -117,14 +124,14 @@ class SettingsActions(
 class UpdateInfo(val state: UpdateState, val installed: String)
 
 /** Pages opened from the settings menu. */
-enum class SettingsPage(val title: String) {
-    Sensor("Sensore G7"),
-    Service("Servizio in background"),
-    Display("Visualizzazione"),
-    Source("Origine dei dati"),
-    Updates("Aggiornamenti"),
-    Watch("Orologio"),
-    Chart("Grafico"),
+enum class SettingsPage(@param:StringRes val title: Int) {
+    Sensor(R.string.page_sensor),
+    Service(R.string.page_service),
+    Display(R.string.page_display),
+    Source(R.string.page_source),
+    Updates(R.string.page_updates),
+    Watch(R.string.page_watch),
+    Chart(R.string.page_chart),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -136,7 +143,7 @@ private fun SettingsScaffold(title: String, onBack: (() -> Unit)?, content: @Com
                 title = { Text(title) },
                 // No back arrow on a tab of the bottom bar.
                 navigationIcon = {
-                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") }
+                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
                 },
             )
         },
@@ -164,19 +171,20 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
     val sensorMode = settings.dataSource != DataSource.Server
     val ok = LocalRangeColors.current.inRange
     val warn = MaterialTheme.colorScheme.error
-    SettingsScaffold("Impostazioni", onBack = null) {
-        MenuGroup("Collegamenti") {
+    SettingsScaffold(stringResource(R.string.settings_title), onBack = null) {
+        MenuGroup(stringResource(R.string.menu_links)) {
             if (sensorMode) {
                 val (summary, tint) = when {
-                    settings.pairingCode.isBlank() -> "Inserisci il codice di abbinamento" to warn
-                    !settings.hasCertificates && settings.sensorMac == null -> "Manca il certificato per il primo abbinamento" to warn
-                    settings.sensorMac != null -> "Abbinato · codice ${settings.pairingCode}" to ok
-                    else -> "Codice ${settings.pairingCode} · in attesa del sensore" to null
+                    settings.pairingCode.isBlank() -> stringResource(R.string.menu_sensor_no_code) to warn
+                    !settings.hasCertificates && settings.sensorMac == null -> stringResource(R.string.menu_sensor_no_cert) to warn
+                    settings.sensorMac != null -> stringResource(R.string.menu_sensor_paired, settings.pairingCode) to ok
+                    else -> stringResource(R.string.menu_sensor_waiting, settings.pairingCode) to null
                 }
-                MenuRow(Icons.Outlined.Sensors, "Sensore G7", summary, tint) { actions.onOpenPage(SettingsPage.Sensor) }
+                MenuRow(Icons.Outlined.Sensors, stringResource(R.string.page_sensor), summary, tint) { actions.onOpenPage(SettingsPage.Sensor) }
                 MenuRow(
-                    Icons.Outlined.WaterDrop, "Glucometro",
-                    settings.meterName ?: (if (settings.meterMac != null) "Abbinato" else "Facoltativo · non abbinato"),
+                    Icons.Outlined.WaterDrop, stringResource(R.string.menu_meter),
+                    settings.meterName
+                        ?: stringResource(if (settings.meterMac != null) R.string.menu_meter_paired else R.string.menu_meter_optional),
                     if (settings.meterMac != null) ok else null,
                     onClick = actions.onOpenMeter,
                 )
@@ -185,13 +193,13 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
             val connected = if (follow) settings.followConnected else settings.serverConnected
             val error = if (follow) settings.followError else settings.uploadError
             MenuRow(
-                Icons.Outlined.Cloud, if (follow) "Server (ricezione)" else "Server (caricamento)",
+                Icons.Outlined.Cloud, stringResource(if (follow) R.string.menu_server_follow else R.string.menu_server_upload),
                 when {
-                    !follow && connected && settings.uploadPaused -> "Invio in pausa · collegato come ${settings.serverUser}"
+                    !follow && connected && settings.uploadPaused -> stringResource(R.string.menu_server_paused, settings.serverUser)
                     error != null -> error
-                    connected -> "Collegato come ${if (follow) settings.followUser else settings.serverUser}"
-                    follow -> "Da configurare"
-                    else -> "Facoltativo · non configurato"
+                    connected -> stringResource(R.string.menu_server_connected, if (follow) settings.followUser else settings.serverUser)
+                    follow -> stringResource(R.string.menu_server_to_setup)
+                    else -> stringResource(R.string.menu_server_optional)
                 },
                 when {
                     !follow && connected && settings.uploadPaused -> null
@@ -202,31 +210,35 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
                 onClick = actions.onOpenServer,
             )
         }
-        MenuGroup("App") {
+        MenuGroup(stringResource(R.string.menu_app)) {
             val on = settings.collectorEnabled
             MenuRow(
-                Icons.Outlined.PowerSettingsNew, "Servizio in background",
-                when {
-                    on && serviceRunning -> "Attivo · anche ad app chiusa"
-                    on -> "In avvio…"
-                    else -> "Fermo · allarmi spenti ad app chiusa"
-                },
+                Icons.Outlined.PowerSettingsNew, stringResource(R.string.page_service),
+                stringResource(
+                    when {
+                        on && serviceRunning -> R.string.menu_service_on
+                        on -> R.string.menu_service_starting
+                        else -> R.string.menu_service_off
+                    }
+                ),
                 if (on && serviceRunning) ok else warn,
             ) { actions.onOpenPage(SettingsPage.Service) }
             MenuRow(
-                Icons.Outlined.Tune, "Visualizzazione",
-                "${Glucose.unit(settings.useMmol)} · target ${Glucose.format(settings.lowMgdl, settings.useMmol)}–" +
-                    Glucose.format(settings.highMgdl, settings.useMmol),
+                Icons.Outlined.Tune, stringResource(R.string.page_display),
+                stringResource(
+                    R.string.menu_display_summary, Glucose.unit(settings.useMmol),
+                    Glucose.format(settings.lowMgdl, settings.useMmol), Glucose.format(settings.highMgdl, settings.useMmol),
+                ),
             ) { actions.onOpenPage(SettingsPage.Display) }
             MenuRow(
-                Icons.Outlined.SwapHoriz, "Origine dei dati",
-                if (sensorMode) "Sensore G7 via Bluetooth" else "Server G7 Monitor",
+                Icons.Outlined.SwapHoriz, stringResource(R.string.page_source),
+                stringResource(if (sensorMode) R.string.menu_source_sensor else R.string.menu_source_server),
             ) { actions.onOpenPage(SettingsPage.Source) }
-            MenuRow(Icons.AutoMirrored.Outlined.ShowChart, "Grafico", chartSummary(settings)) { actions.onOpenPage(SettingsPage.Chart) }
-            MenuRow(Icons.Outlined.Watch, "Orologio", "Complicazioni, installazione e aggiornamenti") { actions.onOpenPage(SettingsPage.Watch) }
+            MenuRow(Icons.AutoMirrored.Outlined.ShowChart, stringResource(R.string.page_chart), chartSummary(settings)) { actions.onOpenPage(SettingsPage.Chart) }
+            MenuRow(Icons.Outlined.Watch, stringResource(R.string.page_watch), stringResource(R.string.menu_watch_summary)) { actions.onOpenPage(SettingsPage.Watch) }
             val available = update.state is UpdateState.Available || update.state is UpdateState.NeedsPermission
             MenuRow(
-                Icons.Outlined.SystemUpdate, "Aggiornamenti", updateSummary(update.state, update.installed),
+                Icons.Outlined.SystemUpdate, stringResource(R.string.page_updates), updateSummary(update.state, update.installed),
                 when {
                     available -> MaterialTheme.colorScheme.tertiary
                     update.state is UpdateState.Failed -> warn
@@ -234,7 +246,9 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
                 },
             ) { actions.onOpenPage(SettingsPage.Updates) }
             if (sensorMode) {
-                MenuRow(Icons.Outlined.MonitorHeart, "Diagnostica", "Stato del collegamento e registro eventi", onClick = actions.onOpenDiagnostics)
+                MenuRow(
+                    Icons.Outlined.MonitorHeart, stringResource(R.string.menu_diagnostics),
+                    stringResource(R.string.menu_diagnostics_summary), onClick = actions.onOpenDiagnostics)
             }
         }
         Disclaimer()
@@ -251,7 +265,7 @@ fun SettingsPageScreen(
     actions: SettingsActions,
     onBack: () -> Unit,
 ) {
-    SettingsScaffold(page.title, onBack) {
+    SettingsScaffold(stringResource(page.title), onBack) {
         when (page) {
             SettingsPage.Sensor -> {
                 SensorSection(settings, actions)
@@ -328,8 +342,7 @@ private fun Disclaimer() {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            "Protocollo G7 basato su xDrip+ (GPLv3). Questa app non è un dispositivo medico: " +
-                "non usarla per decisioni terapeutiche senza verificare con un dispositivo approvato.",
+            stringResource(R.string.disclaimer),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -342,13 +355,13 @@ private fun SensorSection(settings: AppSettings, actions: SettingsActions) {
     var confirmForget by remember { mutableStateOf(false) }
     val valid = code.matches(Regex("\\d{4}|\\d{6}"))
 
-    SectionCard("Abbinamento", Icons.Outlined.Key) {
+    SectionCard(stringResource(R.string.sensor_pairing), Icons.Outlined.Key) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = code,
                 onValueChange = { v -> code = v.filter(Char::isDigit).take(6) },
-                label = { Text("Codice di abbinamento") },
-                supportingText = { Text("Stampato sull'applicatore del G7") },
+                label = { Text(stringResource(R.string.sensor_code)) },
+                supportingText = { Text(stringResource(R.string.sensor_code_hint)) },
                 leadingIcon = { Icon(Icons.Outlined.Key, contentDescription = null) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 singleLine = true,
@@ -357,16 +370,16 @@ private fun SensorSection(settings: AppSettings, actions: SettingsActions) {
             )
         }
         if (code != settings.pairingCode) {
-            Button(onClick = { actions.onPairingCode(code) }, enabled = valid) { Text("Salva codice") }
+            Button(onClick = { actions.onPairingCode(code) }, enabled = valid) { Text(stringResource(R.string.sensor_save_code)) }
         }
-        settings.sensorMac?.let { SettingRow(Icons.Outlined.Link, "Sensore abbinato", it) }
+        settings.sensorMac?.let { SettingRow(Icons.Outlined.Link, stringResource(R.string.sensor_paired), it) }
         TextButton(
             onClick = { confirmForget = true },
             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
         ) {
             Icon(Icons.Outlined.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Dimentica sensore")
+            Text(stringResource(R.string.sensor_forget))
         }
     }
 
@@ -374,10 +387,10 @@ private fun SensorSection(settings: AppSettings, actions: SettingsActions) {
         AlertDialog(
             onDismissRequest = { confirmForget = false },
             icon = { Icon(Icons.Outlined.DeleteOutline, contentDescription = null) },
-            title = { Text("Dimenticare il sensore?") },
-            text = { Text("Verranno rimossi la chiave di autenticazione e l'abbinamento Bluetooth. Usalo quando cambi sensore o se il collegamento non funziona più.") },
-            confirmButton = { TextButton(onClick = { confirmForget = false; actions.onForget() }) { Text("Dimentica") } },
-            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Annulla") } },
+            title = { Text(stringResource(R.string.sensor_forget_title)) },
+            text = { Text(stringResource(R.string.sensor_forget_text)) },
+            confirmButton = { TextButton(onClick = { confirmForget = false; actions.onForget() }) { Text(stringResource(R.string.sensor_forget_confirm)) } },
+            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -389,7 +402,7 @@ private fun DisplaySection(settings: AppSettings, actions: SettingsActions) {
     var high by remember(settings.highMgdl) { mutableFloatStateOf(settings.highMgdl.toFloat()) }
 
     Panel {
-        Text("Unità di misura", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.display_unit), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             listOf(false to "mg/dL", true to "mmol/L").forEachIndexed { i, (v, label) ->
                 SegmentedButton(
@@ -400,7 +413,7 @@ private fun DisplaySection(settings: AppSettings, actions: SettingsActions) {
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Intervallo target", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text(stringResource(R.string.display_range), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             Text(
                 "${Glucose.format(low.toInt(), mmol)} – ${Glucose.format(high.toInt(), mmol)} ${Glucose.unit(mmol)}",
                 style = MaterialTheme.typography.titleMedium,
@@ -414,25 +427,37 @@ private fun DisplaySection(settings: AppSettings, actions: SettingsActions) {
             valueRange = 55f..250f,
         )
     }
+    val scope = rememberCoroutineScope()
+    Panel {
+        SettingRow(
+            Icons.Outlined.Notifications, stringResource(R.string.display_status_number),
+            stringResource(R.string.display_status_number_text),
+            trailing = {
+                Switch(
+                    checked = settings.statusBarNumber,
+                    onCheckedChange = { v -> scope.launch { G7App.instance.settings.setStatusBarNumber(v) } },
+                )
+            },
+        )
+    }
 }
 
 @Composable
 private fun DataSourceSection(settings: AppSettings, actions: SettingsActions) {
     var pending by remember { mutableStateOf<DataSource?>(null) }
     Panel {
-        val options = listOf(DataSource.Sensor to "Sensore G7", DataSource.Server to "Server")
+        val options = listOf(DataSource.Sensor to R.string.source_sensor, DataSource.Server to R.string.source_server)
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { i, (source, label) ->
                 SegmentedButton(
                     selected = settings.dataSource == source,
                     onClick = { if (settings.dataSource != source) pending = source },
                     shape = SegmentedButtonDefaults.itemShape(i, options.size),
-                ) { Text(label) }
+                ) { Text(stringResource(label)) }
             }
         }
         Text(
-            if (settings.dataSource == DataSource.Server) "Le glicemie arrivano da un server G7 Monitor: il telefono non si collega al sensore."
-            else "Il telefono si collega al sensore via Bluetooth. Il server è facoltativo.",
+            stringResource(if (settings.dataSource == DataSource.Server) R.string.source_server_text else R.string.source_sensor_text),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -441,15 +466,12 @@ private fun DataSourceSection(settings: AppSettings, actions: SettingsActions) {
         AlertDialog(
             onDismissRequest = { pending = null },
             icon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
-            title = { Text(if (source == DataSource.Server) "Ricevere dal server?" else "Usare il sensore?") },
+            title = { Text(stringResource(if (source == DataSource.Server) R.string.source_to_server_title else R.string.source_to_sensor_title)) },
             text = {
-                Text(
-                    if (source == DataSource.Server) "Il collegamento al sensore si interrompe e le glicemie arriveranno dal server. Le impostazioni del sensore restano salvate."
-                    else "La ricezione dal server si interrompe e il telefono userà il sensore G7. Il collegamento al server resta salvato."
-                )
+                Text(stringResource(if (source == DataSource.Server) R.string.source_to_server_text else R.string.source_to_sensor_text))
             },
-            confirmButton = { TextButton(onClick = { pending = null; actions.onDataSource(source) }) { Text("Cambia") } },
-            dismissButton = { TextButton(onClick = { pending = null }) { Text("Annulla") } },
+            confirmButton = { TextButton(onClick = { pending = null; actions.onDataSource(source) }) { Text(stringResource(R.string.action_change)) } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -468,54 +490,53 @@ private fun ServiceSection(settings: AppSettings, running: Boolean, actions: Set
     Panel {
         SettingRow(
             if (on && running) Icons.Outlined.CheckCircle else Icons.Outlined.PauseCircle,
-            when {
-                on && running -> "Servizio attivo"
-                on -> "Servizio in avvio…"
-                else -> "Servizio fermo"
-            },
-            if (settings.dataSource == DataSource.Server) "Ricezione dal server, allarmi e notifica anche ad app chiusa"
-            else "Collegamento al sensore, allarmi e notifica anche ad app chiusa",
+            stringResource(
+                when {
+                    on && running -> R.string.service_on
+                    on -> R.string.service_starting
+                    else -> R.string.service_off
+                }
+            ),
+            stringResource(if (settings.dataSource == DataSource.Server) R.string.service_what_server else R.string.service_what_sensor),
             iconTint = if (on && running) ok else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            "Si avvia da solo all'accensione del telefono e, se Android lo chiude, si riattiva entro 15 minuti. " +
-                "Fermarlo spegne anche gli allarmi: per questo serve lo sblocco del telefono.",
+            stringResource(R.string.service_explain),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (on) {
-            OutlinedButton(onClick = { actions.onCollector(false) }) { Text("Ferma servizio") }
+            OutlinedButton(onClick = { actions.onCollector(false) }) { Text(stringResource(R.string.service_stop)) }
         } else {
-            Button(onClick = { actions.onCollector(true) }) { Text("Avvia come servizio") }
+            Button(onClick = { actions.onCollector(true) }) { Text(stringResource(R.string.service_start)) }
         }
         HorizontalDivider()
         if (exempt) {
             SettingRow(
-                Icons.Outlined.CheckCircle, "Nessuna restrizione di batteria",
-                "L'app può aggiornarsi anche a schermo spento",
+                Icons.Outlined.CheckCircle, stringResource(R.string.service_battery_ok),
+                stringResource(R.string.service_battery_ok_text),
                 iconTint = LocalRangeColors.current.inRange,
             )
         } else {
             Text(
-                "Per non perdere letture a schermo spento, consenti all'app di funzionare senza restrizioni di batteria.",
+                stringResource(R.string.service_battery_ask),
                 style = MaterialTheme.typography.bodyMedium,
             )
             FilledTonalButton(onClick = {
                 context.startActivity(
                     Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
                 )
-            }) { Text("Consenti") }
+            }) { Text(stringResource(R.string.action_allow)) }
         }
         if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
             Text(
-                "Sui Samsung: Impostazioni → Batteria → Limiti di utilizzo in background → " +
-                    "App mai in sospensione → aggiungi G7 Monitor.",
+                stringResource(R.string.service_samsung),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             TextButton(onClick = {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-            }) { Text("Apri le impostazioni dell'app") }
+            }) { Text(stringResource(R.string.service_app_settings)) }
         }
     }
 }
@@ -533,27 +554,26 @@ private fun CertificateSection(settings: AppSettings, actions: SettingsActions) 
     fun importQr(text: String) {
         val certs = G7Certificates.fromXdripQr(text)
         if (certs == null) {
-            error = "QR non riconosciuto: serve il QR \"G Key\" di xDrip (testo che inizia con xdp2:)"
+            error = context.getString(R.string.cert_bad_qr)
         } else {
             val (a, b, c) = certs.toHex()
             actions.onCertificates(a, b, c)
             error = null
             qrText = ""
-            Toast.makeText(context, "Certificato importato", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.cert_imported, Toast.LENGTH_SHORT).show()
         }
     }
 
-    SectionCard("Certificato G7", Icons.Outlined.QrCodeScanner) {
+    SectionCard(stringResource(R.string.cert_title), Icons.Outlined.QrCodeScanner) {
         if (settings.hasCertificates) {
             SettingRow(
-                Icons.Outlined.CheckCircle, "Certificato configurato",
-                "Serve solo per il primo abbinamento di un nuovo sensore",
+                Icons.Outlined.CheckCircle, stringResource(R.string.cert_configured),
+                stringResource(R.string.cert_configured_text),
                 iconTint = LocalRangeColors.current.inRange,
             )
         } else {
             Text(
-                "Al primo abbinamento il G7 chiede un certificato applicativo (in xDrip: \"G Key\"). " +
-                    "Importalo dal QR code di xDrip.",
+                stringResource(R.string.cert_explain),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -562,25 +582,25 @@ private fun CertificateSection(settings: AppSettings, actions: SettingsActions) 
                 context,
                 GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build(),
             ).startScan()
-                .addOnSuccessListener { code -> code.rawValue?.let(::importQr) ?: run { error = "QR vuoto" } }
-                .addOnFailureListener { e -> error = "Scanner non disponibile: ${e.message}" }
+                .addOnSuccessListener { code -> code.rawValue?.let(::importQr) ?: run { error = context.getString(R.string.cert_empty_qr) } }
+                .addOnFailureListener { e -> error = context.getString(R.string.cert_no_scanner, e.message) }
         }) {
             Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(if (settings.hasCertificates) "Scansiona di nuovo" else "Scansiona QR di xDrip")
+            Text(stringResource(if (settings.hasCertificates) R.string.cert_scan_again else R.string.cert_scan))
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
 
         TextButton(onClick = { manual = !manual }) {
-            Text(if (manual) "Nascondi inserimento manuale" else "Incolla testo o valori manualmente")
+            Text(stringResource(if (manual) R.string.cert_hide_manual else R.string.cert_show_manual))
         }
         if (manual) {
             OutlinedTextField(
                 value = qrText, onValueChange = { qrText = it },
-                label = { Text("Testo del QR (xdp2:…)") },
+                label = { Text(stringResource(R.string.cert_qr_text)) },
                 maxLines = 3, modifier = Modifier.fillMaxWidth(),
             )
-            if (qrText.isNotBlank()) Button(onClick = { importQr(qrText) }) { Text("Importa testo") }
+            if (qrText.isNotBlank()) Button(onClick = { importQr(qrText) }) { Text(stringResource(R.string.cert_import_text)) }
             listOf(Triple("keks_p1", p1) { v: String -> p1 = v }, Triple("keks_p2", p2) { v: String -> p2 = v }, Triple("keks_p3", p3) { v: String -> p3 = v })
                 .forEach { (label, value, set) ->
                     OutlinedTextField(
@@ -589,8 +609,8 @@ private fun CertificateSection(settings: AppSettings, actions: SettingsActions) 
                     )
                 }
             val valid = (p1.isBlank() && p2.isBlank() && p3.isBlank()) || G7Certificates.fromHex(p1, p2, p3) != null
-            if (!valid) Text("Valori non validi", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            Button(onClick = { actions.onCertificates(p1, p2, p3); manual = false }, enabled = valid) { Text("Salva valori") }
+            if (!valid) Text(stringResource(R.string.cert_invalid), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Button(onClick = { actions.onCertificates(p1, p2, p3); manual = false }, enabled = valid) { Text(stringResource(R.string.cert_save)) }
         }
     }
 }

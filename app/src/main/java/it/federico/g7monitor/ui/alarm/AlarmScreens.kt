@@ -89,6 +89,9 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /** Order shown in the list: from the lowest glucose to the highest, then signal. */
 private val ORDER = listOf(
@@ -115,14 +118,15 @@ fun AlarmConfig.valueText(mmol: Boolean, value: Int = this.value): String = when
             AlarmType.UrgentHigh -> "≥"
             else -> ">"
         }
-        "$op ${Glucose.format(value, mmol)} ${Glucose.unit(mmol)}"
+        str(R.string.alarm_value_glucose, op, Glucose.format(value, mmol), Glucose.unit(mmol))
     }
     ValueKind.Rate -> {
         val perMin = value / 10.0
-        if (mmol) String.format(Locale.ITALY, "più di %.2f mmol/L al minuto", perMin / Glucose.MGDL_PER_MMOL)
-        else String.format(Locale.ITALY, "più di %.1f mg/dL al minuto", perMin)
+        val number = if (mmol) String.format(Locale.getDefault(), "%.2f", perMin / Glucose.MGDL_PER_MMOL)
+        else String.format(Locale.getDefault(), "%.1f", perMin)
+        str(R.string.alarm_value_rate, number, Glucose.unit(mmol))
     }
-    ValueKind.Minutes -> "$value min senza letture"
+    ValueKind.Minutes -> str(R.string.alarm_value_minutes, value)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -133,7 +137,7 @@ private fun Page(title: String, onBack: (() -> Unit)?, content: @Composable () -
             TopAppBar(
                 title = { Text(title) },
                 // No back arrow on a tab of the bottom bar.
-                navigationIcon = { if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") } },
+                navigationIcon = { if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) } },
             )
         },
     ) { padding ->
@@ -164,12 +168,11 @@ fun AlarmsScreen(
     onPause: (Long?) -> Unit = {},
     onBack: (() -> Unit)? = null,
 ) {
-    Page("Allarmi", onBack) {
+    Page(stringResource(R.string.alarms_title), onBack) {
         MasterSwitch(pausedUntil, onPause)
         Warnings(receiving)
         Text(
-            "Tocca un allarme per soglia, suono e vibrazione. Suonano sul canale \"sveglia\" del telefono, " +
-                "anche in modalità silenziosa; per disattivarne uno serve lo sblocco del telefono.",
+            stringResource(R.string.alarms_explain),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         for (type in ORDER) {
@@ -185,7 +188,7 @@ fun AlarmsScreen(
                     Column(Modifier.weight(1f)) {
                         Text(type.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         Text(
-                            if (c.enabled) "${c.valueText(mmol)} · ${c.output.label}" else "Disattivato",
+                            if (c.enabled) stringResource(R.string.alarm_item_summary, c.valueText(mmol), c.output.label) else stringResource(R.string.alarm_off),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -193,24 +196,36 @@ fun AlarmsScreen(
                 }
             }
         }
-        SectionCard("Prova le notifiche", Icons.Outlined.PlayArrow) {
+        SectionCard(stringResource(R.string.alarms_test_notifications), Icons.Outlined.PlayArrow) {
             TestButtons(onTest)
         }
     }
 }
 
-/** "Sospesi fino alle 21:30", "Sospesi finché non li riattivi". */
-fun pausedText(until: Long): String = when {
-    until == AlarmRepository.PAUSED_UNTIL_RESUMED -> "Sospesi finché non li riattivi"
+/** "Paused until 21:30", "Paused until you turn them back on"; [short] drops "Paused" ("Until 21:30"). */
+fun pausedText(until: Long, short: Boolean = false): String = when {
+    until == AlarmRepository.PAUSED_UNTIL_RESUMED ->
+        str(if (short) R.string.paused_until_resumed_short else R.string.paused_until_resumed)
     else -> {
-        val day = { t: Long -> SimpleDateFormat("yyyyMMdd", Locale.ITALY).format(Date(t)) }
-        val time = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(until))
-        if (day(until) == day(System.currentTimeMillis())) "Sospesi fino alle $time" else "Sospesi fino a domani alle $time"
+        val day = { t: Long -> SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date(t)) }
+        val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(until))
+        val today = day(until) == day(System.currentTimeMillis())
+        str(
+            when {
+                today && short -> R.string.paused_until_short
+                today -> R.string.paused_until
+                short -> R.string.paused_until_tomorrow_short
+                else -> R.string.paused_until_tomorrow
+            },
+            time,
+        )
     }
 }
 
 /** Pause durations offered, in minutes (null: until turned back on). */
-private val PAUSES = listOf(30 to "30 minuti", 60 to "1 ora", 120 to "2 ore", 480 to "8 ore", null to "Finché non li riattivo")
+private val PAUSES = listOf(
+    30 to R.string.pause_30, 60 to R.string.pause_60, 120 to R.string.pause_120, 480 to R.string.pause_480, null to R.string.pause_forever,
+)
 
 /**
  * Pauses every alarm at once without touching each one's switch: when they come back (by hand or
@@ -230,10 +245,10 @@ private fun MasterSwitch(pausedUntil: Long?, onPause: (Long?) -> Unit) {
             Icon(if (paused) Icons.Outlined.NotificationsOff else Icons.Outlined.NotificationsActive, contentDescription = null)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("Tutti gli allarmi", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(stringResource(R.string.alarms_all), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                 Text(
-                    if (paused) pausedText(pausedUntil!!) + " · le impostazioni restano salvate"
-                    else "Attivi · spegnili qui per sospenderli tutti insieme",
+                    if (paused) stringResource(R.string.alarms_paused_kept, pausedText(pausedUntil!!))
+                    else stringResource(R.string.alarms_active),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -245,11 +260,11 @@ private fun MasterSwitch(pausedUntil: Long?, onPause: (Long?) -> Unit) {
         AlertDialog(
             onDismissRequest = { choose = false },
             icon = { Icon(Icons.Outlined.NotificationsOff, contentDescription = null) },
-            title = { Text("Sospendere tutti gli allarmi?") },
+            title = { Text(stringResource(R.string.alarms_pause_title)) },
             text = {
                 Column {
                     Text(
-                        "Nessun allarme suonerà. Ciascuno mantiene le sue impostazioni e torna attivo alla ripresa.",
+                        stringResource(R.string.alarms_pause_text),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -260,12 +275,12 @@ private fun MasterSwitch(pausedUntil: Long?, onPause: (Long?) -> Unit) {
                                 onPause(minutes?.let { System.currentTimeMillis() + it * 60_000L } ?: AlarmRepository.PAUSED_UNTIL_RESUMED)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text(label, modifier = Modifier.fillMaxWidth()) }
+                        ) { Text(stringResource(label), modifier = Modifier.fillMaxWidth()) }
                     }
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { choose = false }) { Text("Annulla") } },
+            dismissButton = { TextButton(onClick = { choose = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
@@ -276,22 +291,22 @@ private fun Warnings(receiving: Boolean) {
     val context = LocalContext.current
     val nm = context.getSystemService(NotificationManager::class.java)
     val problems = buildList {
-        if (!receiving) add("La raccolta dati è spenta: senza di essa gli allarmi non suonano ad app chiusa." to null)
+        if (!receiving) add(R.string.warn_collection_off to null)
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            add("Le notifiche dell'app sono disattivate." to Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+            add(R.string.warn_notifications_off to Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !nm.canUseFullScreenIntent()) {
-            add("L'allarme non può comparire a tutto schermo sul telefono bloccato." to Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}")))
+            add(R.string.warn_full_screen to Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}")))
         }
         if (context.getSystemService(AudioManager::class.java).getStreamVolume(AudioManager.STREAM_ALARM) == 0) {
-            add("Il volume della sveglia del telefono è a zero: gli allarmi vibreranno soltanto." to null)
+            add(R.string.warn_volume_zero to null)
         }
     }
     if (problems.isEmpty()) return
-    SectionCard("Attenzione", Icons.Outlined.WarningAmber) {
+    SectionCard(stringResource(R.string.warn_title), Icons.Outlined.WarningAmber) {
         problems.forEach { (text, fix) ->
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-            if (fix != null) TextButton(onClick = { context.startActivity(fix) }) { Text("Correggi") }
+            Text(stringResource(text), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            if (fix != null) TextButton(onClick = { context.startActivity(fix) }) { Text(stringResource(R.string.warn_fix)) }
         }
     }
 }
@@ -326,17 +341,17 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
 
     Page(type.title, onBack) {
         Text(type.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SectionCard("Stato", type.icon()) {
+        SectionCard(stringResource(R.string.alarm_status), type.icon()) {
             SettingRow(
-                type.icon(), if (config.enabled) "Attivo" else "Disattivato",
-                if (config.enabled) "Per disattivarlo serve lo sblocco del telefono" else null,
+                type.icon(), stringResource(if (config.enabled) R.string.alarm_on else R.string.alarm_off),
+                if (config.enabled) stringResource(R.string.alarm_off_needs_unlock) else null,
                 trailing = { Switch(checked = config.enabled, onCheckedChange = actions.onToggle) },
             )
         }
 
-        SectionCard("Quando suona", Icons.Outlined.Tune) {
+        SectionCard(stringResource(R.string.alarm_when), Icons.Outlined.Tune) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Soglia", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text(stringResource(R.string.alarm_threshold), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Text(config.valueText(mmol, value.toInt()), style = MaterialTheme.typography.titleMedium, color = LocalRangeColors.current.inRange)
             }
             val r = type.range
@@ -351,7 +366,7 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Snooze, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(10.dp))
-                Text("\"Posticipa\" silenzia per", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.alarm_snooze_for), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val snoozes = listOf(5, 10, 15, 30, 60)
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -365,12 +380,12 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
                 }
             }
             Text(
-                "Se nessuno reagisce, l'allarme risuona a ogni nuova lettura finché la condizione resta vera.",
+                stringResource(R.string.alarm_repeat),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
-        SectionCard("Come avvisa", Icons.AutoMirrored.Outlined.VolumeUp) {
+        SectionCard(stringResource(R.string.alarm_how), Icons.AutoMirrored.Outlined.VolumeUp) {
             AlarmOutput.entries.forEach { o ->
                 Row(
                     Modifier.fillMaxWidth().clickable { actions.onChange(config.copy(output = o)) },
@@ -388,32 +403,32 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
         }
 
         if (config.output != AlarmOutput.VibrationOnly) {
-            SectionCard("Suono", Icons.Outlined.MusicNote) {
+            SectionCard(stringResource(R.string.alarm_sound), Icons.Outlined.MusicNote) {
                 BuiltInSound.entries.forEach { s ->
                     Row(
                         Modifier.fillMaxWidth().clickable { actions.onChange(config.copy(sound = s.name)) },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = config.sound == s.name, onClick = { actions.onChange(config.copy(sound = s.name)) })
-                        Text(s.label + if (s == type.sound) " (consigliato)" else "", style = MaterialTheme.typography.bodyLarge)
+                        Text(if (s == type.sound) stringResource(R.string.alarm_recommended, s.label) else s.label, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 val custom = config.builtInSound == null
                 Row(Modifier.fillMaxWidth().clickable(onClick = actions.onPickSystemSound), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = custom, onClick = actions.onPickSystemSound)
                     Column(Modifier.weight(1f)) {
-                        Text("Suono del telefono…", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.alarm_phone_sound), style = MaterialTheme.typography.bodyLarge)
                         if (custom) {
                             val title = remember(config.sound) {
                                 runCatching { RingtoneManager.getRingtone(context, Uri.parse(config.sound))?.getTitle(context) }.getOrNull()
                             }
-                            Text(title ?: "Suono scelto", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(title ?: stringResource(R.string.alarm_chosen_sound), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Volume", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.alarm_volume), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                     Text("${volume.toInt()}%", style = MaterialTheme.typography.titleSmall)
                 }
                 Slider(
@@ -424,24 +439,24 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
                     steps = 8,
                 )
                 Text(
-                    "Rispetto al volume della sveglia del telefono.",
+                    stringResource(R.string.alarm_volume_note),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
-        SectionCard("Prova", Icons.Outlined.PlayArrow) {
+        SectionCard(stringResource(R.string.alarm_test), Icons.Outlined.PlayArrow) {
             if (!previewing) {
                 OutlinedButton(onClick = { previewing = true; actions.onPreview(config) }) {
                     Icon(Icons.Outlined.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Ascolta suono")
+                    Text(stringResource(R.string.alarm_listen))
                 }
             } else {
                 OutlinedButton(onClick = { previewing = false; actions.onStopPreview() }) {
                     Icon(Icons.Outlined.Stop, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
-                    Text("Ferma")
+                    Text(stringResource(R.string.alarm_stop))
                 }
             }
             TestButtons(actions.onTest)
@@ -454,15 +469,14 @@ fun AlarmDetailScreen(config: AlarmConfig, mmol: Boolean, actions: AlarmDetailAc
 private fun TestButtons(onTest: (delayed: Boolean) -> Unit) {
     val context = LocalContext.current
     Text(
-        "Fa scattare l'allarme come se fosse vero (notifica, pagina a tutto schermo, suono e vibrazione), " +
-            "segnato come PROVA. Fermalo con Posticipa. Con \"tra 10 s\" hai il tempo di bloccare il telefono.",
+        stringResource(R.string.alarm_test_explain),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilledTonalButton(onClick = { onTest(false) }) { Text("Prova allarme") }
+        FilledTonalButton(onClick = { onTest(false) }) { Text(stringResource(R.string.alarm_test_now)) }
         OutlinedButton(onClick = {
             onTest(true)
-            Toast.makeText(context, "L'allarme di prova suonerà tra 10 secondi: blocca il telefono", Toast.LENGTH_LONG).show()
-        }) { Text("Prova tra 10 s") }
+            Toast.makeText(context, R.string.alarm_test_later_toast, Toast.LENGTH_LONG).show()
+        }) { Text(stringResource(R.string.alarm_test_later)) }
     }
 }

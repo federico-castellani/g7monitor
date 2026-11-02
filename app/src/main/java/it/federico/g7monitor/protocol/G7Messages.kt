@@ -1,6 +1,9 @@
 package it.federico.g7monitor.protocol
 
 import java.util.UUID
+import androidx.annotation.StringRes
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 /** GATT layout shared by G6/G7 (xDrip g5model.BluetoothServices). */
 object G7Gatt {
@@ -30,39 +33,40 @@ object G7Commands {
         le(9).put(0x59).putInt(startDexTime).putInt(endDexTime).array()
 }
 
-enum class SensorState(val code: Int, val label: String) {
-    Unknown(0x00, "Sconosciuto"),
-    Stopped(0x01, "Fermo"),
-    WarmingUp(0x02, "Riscaldamento"),
-    ExcessNoise(0x03, "Rumore eccessivo"),
-    NeedsFirstCalibration(0x04, "Calibrazione iniziale richiesta"),
-    NeedsSecondCalibration(0x05, "Seconda calibrazione richiesta"),
-    Ok(0x06, "OK"),
-    NeedsCalibration(0x07, "Calibrazione richiesta"),
-    CalibrationConfused1(0x08, "Calibrazione incoerente"),
-    CalibrationConfused2(0x09, "Calibrazione incoerente"),
-    NeedsDifferentCalibration(0x0a, "Altra calibrazione richiesta"),
-    SensorFailed(0x0b, "Sensore guasto"),
-    SensorFailed2(0x0c, "Sensore guasto"),
-    UnusualCalibration(0x0d, "Calibrazione insolita"),
-    InsufficientCalibration(0x0e, "Calibrazione insufficiente"),
-    Ended(0x0f, "Terminato"),
-    SensorFailed3(0x10, "Sensore guasto"),
-    TransmitterProblem(0x11, "Problema trasmettitore"),
-    Errors(0x12, "Errori sensore"),
-    SensorFailed4(0x13, "Sensore guasto"),
-    SensorFailed5(0x14, "Sensore guasto"),
-    SensorFailed6(0x15, "Sensore guasto"),
-    SensorFailedStart(0x16, "Avvio sensore fallito"),
-    SensorFailedStart2(0x17, "Avvio sensore fallito"),
-    SensorExpired(0x18, "Sensore scaduto"),
-    SensorFailed7(0x19, "Sensore guasto"),
-    SensorStopped2(0x1A, "Sensore fermo"),
-    SensorFailed8(0x1B, "Sensore guasto"),
-    SensorFailed9(0x1C, "Sensore guasto"),
-    SensorFailed10(0x1D, "Sensore guasto"),
-    SensorFailed11(0x1E, "Sensore guasto");
+enum class SensorState(val code: Int, @param:StringRes private val labelRes: Int) {
+    Unknown(0x00, R.string.state_unknown),
+    Stopped(0x01, R.string.state_stopped),
+    WarmingUp(0x02, R.string.state_warming_up),
+    ExcessNoise(0x03, R.string.state_excess_noise),
+    NeedsFirstCalibration(0x04, R.string.state_first_calibration),
+    NeedsSecondCalibration(0x05, R.string.state_second_calibration),
+    Ok(0x06, R.string.state_ok),
+    NeedsCalibration(0x07, R.string.state_calibration),
+    CalibrationConfused1(0x08, R.string.state_calibration_confused),
+    CalibrationConfused2(0x09, R.string.state_calibration_confused),
+    NeedsDifferentCalibration(0x0a, R.string.state_other_calibration),
+    SensorFailed(0x0b, R.string.state_failed),
+    SensorFailed2(0x0c, R.string.state_failed),
+    UnusualCalibration(0x0d, R.string.state_unusual_calibration),
+    InsufficientCalibration(0x0e, R.string.state_insufficient_calibration),
+    Ended(0x0f, R.string.state_ended),
+    SensorFailed3(0x10, R.string.state_failed),
+    TransmitterProblem(0x11, R.string.state_transmitter),
+    Errors(0x12, R.string.state_errors),
+    SensorFailed4(0x13, R.string.state_failed),
+    SensorFailed5(0x14, R.string.state_failed),
+    SensorFailed6(0x15, R.string.state_failed),
+    SensorFailedStart(0x16, R.string.state_failed_start),
+    SensorFailedStart2(0x17, R.string.state_failed_start),
+    SensorExpired(0x18, R.string.state_expired),
+    SensorFailed7(0x19, R.string.state_failed),
+    SensorStopped2(0x1A, R.string.state_sensor_stopped),
+    SensorFailed8(0x1B, R.string.state_failed),
+    SensorFailed9(0x1C, R.string.state_failed),
+    SensorFailed10(0x1D, R.string.state_failed),
+    SensorFailed11(0x1E, R.string.state_failed);
 
+    val label: String get() = str(labelRes)
     val usable get() = this == Ok || this == NeedsCalibration
     val warmingUp get() = this == WarmingUp
 

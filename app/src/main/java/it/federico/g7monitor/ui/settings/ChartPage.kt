@@ -31,13 +31,14 @@ import it.federico.g7monitor.ui.components.SectionCard
 import it.federico.g7monitor.ui.components.SettingRow
 import it.federico.g7monitor.ui.home.GlucoseChart
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
 
 /** Smoothing levels, in the order of the buttons: label and what it does. */
 private val SMOOTHING = listOf(
-    "Nessuno" to "Una linea dritta da una lettura all'altra, come arrivano dal sensore.",
-    "Leggero" to "Una curva morbida che passa esattamente per ogni lettura: i valori non cambiano e la curva non inventa picchi.",
-    "Forte" to "Una curva sulla media delle letture vicine (circa 20 minuti): toglie le piccole oscillazioni del sensore. " +
-        "I punti, se visibili, restano sui valori reali.",
+    R.string.smoothing_none to R.string.smoothing_none_text,
+    R.string.smoothing_light to R.string.smoothing_light_text,
+    R.string.smoothing_strong to R.string.smoothing_strong_text,
 )
 
 /** How the home chart looks, with a live preview on the last hours of readings. */
@@ -55,10 +56,10 @@ fun ChartSections(settings: AppSettings) {
         sticks = app.readings.fingersticksSince(from)
     }
 
-    SectionCard("Anteprima", Icons.AutoMirrored.Outlined.ShowChart) {
+    SectionCard(stringResource(R.string.chart_preview), Icons.AutoMirrored.Outlined.ShowChart) {
         if (readings.isEmpty()) {
             Text(
-                "Nessuna lettura nelle ultime $PREVIEW_HOURS ore: l'anteprima comparirà con i dati.",
+                stringResource(R.string.chart_preview_empty, PREVIEW_HOURS),
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
@@ -71,45 +72,47 @@ fun ChartSections(settings: AppSettings) {
         }
     }
 
-    SectionCard("Lisciamento della linea", Icons.Outlined.Gesture) {
+    SectionCard(stringResource(R.string.chart_smoothing), Icons.Outlined.Gesture) {
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             SMOOTHING.forEachIndexed { level, (label, _) ->
                 SegmentedButton(
                     selected = settings.chartSmoothing == level,
                     onClick = { scope.launch { app.settings.setChartSmoothing(level) } },
                     shape = SegmentedButtonDefaults.itemShape(level, SMOOTHING.size),
-                ) { Text(label) }
+                ) { Text(stringResource(label)) }
             }
         }
         Text(
-            SMOOTHING[settings.chartSmoothing.coerceIn(0, 2)].second,
+            stringResource(SMOOTHING[settings.chartSmoothing.coerceIn(0, 2)].second),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 
-    SectionCard("Cosa mostrare", Icons.Outlined.Tune) {
+    SectionCard(stringResource(R.string.chart_show), Icons.Outlined.Tune) {
         SettingRow(
-            Icons.Outlined.Circle, "Punti delle letture",
-            if (settings.chartDots) "Un punto colorato per ogni lettura" else "Solo la linea, più marcata",
+            Icons.Outlined.Circle, stringResource(R.string.chart_dots),
+            stringResource(if (settings.chartDots) R.string.chart_dots_on else R.string.chart_dots_off),
             trailing = { Switch(checked = settings.chartDots, onCheckedChange = { v -> scope.launch { app.settings.setChartDots(v) } }) },
         )
         SettingRow(
-            Icons.Outlined.WaterDrop, "Misurazioni del glucometro",
-            "I rombi viola con il valore",
+            Icons.Outlined.WaterDrop, stringResource(R.string.chart_fingersticks),
+            stringResource(R.string.chart_fingersticks_text),
             trailing = {
                 Switch(checked = settings.chartFingersticks, onCheckedChange = { v -> scope.launch { app.settings.setChartFingersticks(v) } })
             },
         )
         Text(
-            "L'intervallo del grafico (3, 6, 12 o 24 ore) si sceglie sopra il grafico e resta quello anche alla riapertura.",
+            stringResource(R.string.chart_window_note),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 /** One line for the settings menu. */
-fun chartSummary(s: AppSettings): String =
-    "Lisciamento ${SMOOTHING[s.chartSmoothing.coerceIn(0, 2)].first.lowercase()}" +
-        if (s.chartDots) " · punti visibili" else " · solo linea"
+@Composable
+fun chartSummary(s: AppSettings): String = stringResource(
+    if (s.chartDots) R.string.chart_summary_dots else R.string.chart_summary_line,
+    stringResource(SMOOTHING[s.chartSmoothing.coerceIn(0, 2)].first).lowercase(),
+)
 
 private const val PREVIEW_HOURS = 3

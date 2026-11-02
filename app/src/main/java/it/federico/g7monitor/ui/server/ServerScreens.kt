@@ -77,6 +77,9 @@ import it.federico.g7monitor.ui.theme.LocalRangeColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.res.stringResource
+import it.federico.g7monitor.R
+import it.federico.g7monitor.str
 
 // ------------------------------------------------------------------ shared scaffold
 
@@ -88,7 +91,7 @@ private fun Page(title: String, onBack: (() -> Unit)?, content: @Composable () -
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Indietro") }
+                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back)) }
                 },
             )
         },
@@ -120,26 +123,26 @@ private fun Intro(icon: ImageVector, title: String, text: String) {
     }
 }
 
-private fun ServerPurpose.title() = if (this == ServerPurpose.Follow) "Server da cui ricevere" else "Server dove caricare"
+@Composable
+private fun ServerPurpose.title() = stringResource(if (this == ServerPurpose.Follow) R.string.srv_title_follow else R.string.srv_title_upload)
 
 // ------------------------------------------------------------------ 0. data source
 
 /** First launch (and Settings → Origine dei dati): where does this phone get the readings? */
 @Composable
 fun WelcomeScreen(onChoose: (DataSource) -> Unit, onBack: (() -> Unit)? = null) {
-    Page("G7 Monitor", onBack) {
+    Page(stringResource(R.string.app_name), onBack) {
         Intro(
-            Icons.Outlined.Schedule, "Da dove arrivano le glicemie?",
-            "Puoi cambiare scelta in qualsiasi momento dalle impostazioni.",
+            Icons.Outlined.Schedule, stringResource(R.string.srv_welcome_title),
+            stringResource(R.string.srv_welcome_text),
         )
         ChoiceCard(
-            Icons.Outlined.Bluetooth, "Dal sensore G7",
-            "Questo telefono si collega al sensore via Bluetooth. Funziona anche senza server; " +
-                "se vuoi puoi caricare le glicemie su un server per condividerle.",
+            Icons.Outlined.Bluetooth, stringResource(R.string.srv_from_sensor),
+            stringResource(R.string.srv_from_sensor_text),
         ) { onChoose(DataSource.Sensor) }
         ChoiceCard(
-            Icons.Outlined.CloudDownload, "Dal server",
-            "Ricevi le glicemie di un'altra persona da un server G7 Monitor, senza sensore.",
+            Icons.Outlined.CloudDownload, stringResource(R.string.srv_from_server),
+            stringResource(R.string.srv_from_server_text),
         ) { onChoose(DataSource.Server) }
     }
 }
@@ -192,15 +195,14 @@ fun ServerAddressScreen(
 
     Page(purpose.title(), onBack) {
         Intro(
-            Icons.Outlined.Dns, "Indirizzo del server",
-            if (purpose == ServerPurpose.Follow) "L'indirizzo del server G7 Monitor da cui ricevere le glicemie. Lo trovi nella barra del browser quando apri il sito."
-            else "L'indirizzo del server G7 Monitor su cui caricare le glicemie del sensore.",
+            Icons.Outlined.Dns, stringResource(R.string.srv_address_title),
+            stringResource(if (purpose == ServerPurpose.Follow) R.string.srv_address_follow else R.string.srv_address_upload),
         )
         OutlinedTextField(
             value = url, onValueChange = { url = it.trim(); error = null },
-            label = { Text("Indirizzo") }, placeholder = { Text("glicemie.esempio.it") },
+            label = { Text(stringResource(R.string.srv_address)) }, placeholder = { Text(stringResource(R.string.srv_address_example)) },
             leadingIcon = { Icon(Icons.Outlined.Cloud, contentDescription = null) },
-            supportingText = { Text("Solo connessioni sicure (https)") },
+            supportingText = { Text(stringResource(R.string.srv_https_only)) },
             isError = error != null,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
             keyboardActions = KeyboardActions(onGo = { if (!busy && url.isNotBlank()) check() }),
@@ -208,7 +210,7 @@ fun ServerAddressScreen(
         )
         error?.let { ErrorText(it) }
         Button(onClick = check, enabled = !busy && url.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            if (busy) Progress() else Text("Continua")
+            if (busy) Progress() else Text(stringResource(R.string.srv_continue))
         }
     }
 }
@@ -238,7 +240,7 @@ fun ServerLoginScreen(
             busy = false
             when (r) {
                 is ServerResult.Ok -> { password = ""; onDone() }
-                ServerResult.NeedsTotp -> { needsTotp = true; error = "Inserisci il codice di verifica" }
+                ServerResult.NeedsTotp -> { needsTotp = true; error = str(R.string.srv_enter_totp) }
                 is ServerResult.Error -> { error = r.message; totp = "" }
             }
         }
@@ -246,21 +248,20 @@ fun ServerLoginScreen(
 
     Page(purpose.title(), onBack) {
         Intro(
-            Icons.Outlined.Lock, "Accedi",
-            "Server trovato: ${url.removePrefix("https://")}\n" +
-                if (purpose == ServerPurpose.Follow) "Usa il tuo account del sito. Basta un account in sola lettura."
-                else "Serve un account con il permesso di caricare le glicemie.",
+            Icons.Outlined.Lock, stringResource(R.string.srv_sign_in),
+            stringResource(R.string.srv_found, url.removePrefix("https://")) + "\n" +
+                stringResource(if (purpose == ServerPurpose.Follow) R.string.srv_sign_in_follow else R.string.srv_sign_in_upload),
         )
         OutlinedTextField(
             value = user, onValueChange = { user = it },
-            label = { Text("Nome utente") },
+            label = { Text(stringResource(R.string.srv_username)) },
             leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             singleLine = true, modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
             value = password, onValueChange = { password = it },
-            label = { Text("Password") },
+            label = { Text(stringResource(R.string.srv_password)) },
             leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = if (needsTotp) ImeAction.Next else ImeAction.Done),
@@ -270,8 +271,8 @@ fun ServerLoginScreen(
         if (needsTotp) {
             OutlinedTextField(
                 value = totp, onValueChange = { v -> totp = v.filter(Char::isDigit).take(6) },
-                label = { Text("Codice di verifica") },
-                supportingText = { Text("Dall'app di autenticazione") },
+                label = { Text(stringResource(R.string.srv_totp)) },
+                supportingText = { Text(stringResource(R.string.srv_totp_hint)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (canSubmit) login() }),
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -279,10 +280,10 @@ fun ServerLoginScreen(
         }
         error?.let { ErrorText(it) }
         Button(onClick = login, enabled = canSubmit, modifier = Modifier.fillMaxWidth()) {
-            if (busy) Progress() else Text("Accedi")
+            if (busy) Progress() else Text(stringResource(R.string.srv_sign_in))
         }
         Text(
-            "La password serve solo ora: il telefono conserva un codice di accesso che puoi revocare dal sito.",
+            stringResource(R.string.srv_password_note),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -303,7 +304,7 @@ class ServerStatusActions(
 @Composable
 fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: ServerStatusActions, onBack: () -> Unit) {
     var confirm by remember { mutableStateOf(false) }
-    val timeFmt = remember { SimpleDateFormat("d MMM HH:mm", Locale.ITALY) }
+    val timeFmt = remember { SimpleDateFormat("d MMM HH:mm", Locale.getDefault()) }
     val follow = purpose == ServerPurpose.Follow
     val url = if (follow) settings.followUrl else settings.serverUrl
     val user = if (follow) settings.followUser else settings.serverUser
@@ -312,69 +313,66 @@ fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: S
     val paused = !follow && settings.uploadPaused
 
     Page(purpose.title(), onBack) {
-        SectionCard("Collegamento", Icons.Outlined.CloudDone) {
-            SettingRow(Icons.Outlined.Dns, url.removePrefix("https://"), "Server G7 Monitor")
-            SettingRow(Icons.Outlined.Person, user, if (follow) "Account (ricezione)" else "Account (caricamento)")
+        SectionCard(stringResource(R.string.srv_connection), Icons.Outlined.CloudDone) {
+            SettingRow(Icons.Outlined.Dns, url.removePrefix("https://"), stringResource(R.string.srv_g7_server))
+            SettingRow(Icons.Outlined.Person, user, stringResource(if (follow) R.string.srv_account_follow else R.string.srv_account_upload))
             if (paused) {
                 SettingRow(
-                    Icons.Outlined.PauseCircle, "Invio in pausa",
-                    "Il collegamento resta salvato: riattivalo qui sotto quando vuoi",
+                    Icons.Outlined.PauseCircle, stringResource(R.string.srv_paused),
+                    stringResource(R.string.srv_paused_text),
                 )
             } else if (error != null) {
                 SettingRow(Icons.Outlined.ErrorOutline, error, null, iconTint = MaterialTheme.colorScheme.error)
             } else {
                 SettingRow(
                     Icons.Outlined.Schedule,
-                    last?.let { (if (follow) "Ultimo aggiornamento: " else "Ultimo invio: ") + timeFmt.format(Date(it)) }
-                        ?: if (follow) "In attesa del primo aggiornamento" else "In attesa della prossima lettura",
+                    last?.let { stringResource(if (follow) R.string.srv_last_update else R.string.srv_last_upload, timeFmt.format(Date(it))) }
+                        ?: stringResource(if (follow) R.string.srv_waiting_first else R.string.srv_waiting_next),
                     null, iconTint = LocalRangeColors.current.inRange,
                 )
             }
-            FilledTonalButton(onClick = actions.onNow, enabled = !paused) { Text(if (follow) "Aggiorna ora" else "Invia ora") }
+            FilledTonalButton(onClick = actions.onNow, enabled = !paused) { Text(stringResource(if (follow) R.string.srv_update_now else R.string.srv_upload_now)) }
         }
 
         if (follow) {
-            SectionCard("Ricezione", Icons.Outlined.CloudDownload) {
+            SectionCard(stringResource(R.string.srv_receiving), Icons.Outlined.CloudDownload) {
                 SettingRow(
-                    Icons.Outlined.Notifications, "In background",
-                    "Notifica con l'ultima glicemia, anche ad app chiusa",
+                    Icons.Outlined.Notifications, stringResource(R.string.srv_background),
+                    stringResource(R.string.srv_background_text),
                     trailing = { Switch(checked = settings.collectorEnabled, onCheckedChange = actions.onBackground) },
                 )
                 Text(
-                    "Il telefono chiede i dati al server solo quando è attesa una nuova lettura (circa ogni 5 minuti), " +
-                        "senza tenere una connessione sempre aperta.",
+                    stringResource(R.string.srv_follow_explain),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         } else {
-            SectionCard("Invio", Icons.Outlined.CloudUpload) {
+            SectionCard(stringResource(R.string.srv_uploading), Icons.Outlined.CloudUpload) {
                 SettingRow(
                     if (paused) Icons.Outlined.PauseCircle else Icons.Outlined.CloudUpload,
-                    "Invio al server",
-                    if (paused) "In pausa: le letture restano sul telefono e partono tutte quando lo riattivi"
-                    else "Attivo: le letture vanno al server",
+                    stringResource(R.string.srv_upload_to_server),
+                    stringResource(if (paused) R.string.srv_upload_paused else R.string.srv_upload_active),
                     trailing = { Switch(checked = !paused, onCheckedChange = { on -> actions.onUploadPaused(!on) }) },
                 )
                 HorizontalDivider()
-                Text("Frequenza di invio", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val intervals = listOf(5 to "5 min", 15 to "15 min", 30 to "30 min", 60 to "1 ora")
+                Text(stringResource(R.string.srv_upload_frequency), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val intervals = listOf(5 to R.string.interval_5, 15 to R.string.interval_15, 30 to R.string.interval_30, 60 to R.string.interval_60)
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     intervals.forEachIndexed { i, (minutes, label) ->
                         SegmentedButton(
                             selected = settings.uploadIntervalMin == minutes,
                             onClick = { actions.onUploadInterval(minutes) },
                             shape = SegmentedButtonDefaults.itemShape(i, intervals.size),
-                        ) { Text(label) }
+                        ) { Text(stringResource(label)) }
                     }
                 }
                 Text(
-                    "Con 5 minuti chi ti segue vede ogni lettura subito. Intervalli più lunghi raggruppano le letture " +
-                        "in un solo invio: meno batteria e meno dati.",
+                    stringResource(R.string.srv_frequency_explain),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 HorizontalDivider()
                 SettingRow(
-                    Icons.Outlined.Wifi, "Solo con Wi-Fi", "Con la rete mobile le letture restano sul telefono",
+                    Icons.Outlined.Wifi, stringResource(R.string.srv_wifi_only), stringResource(R.string.srv_wifi_only_text),
                     trailing = { Switch(checked = settings.uploadWifiOnly, onCheckedChange = actions.onUploadWifiOnly) },
                 )
             }
@@ -386,7 +384,7 @@ fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: S
         ) {
             Icon(Icons.Outlined.CloudOff, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Scollega dal server")
+            Text(stringResource(R.string.srv_disconnect))
         }
     }
 
@@ -394,16 +392,12 @@ fun ServerStatusScreen(purpose: ServerPurpose, settings: AppSettings, actions: S
         AlertDialog(
             onDismissRequest = { confirm = false },
             icon = { Icon(Icons.Outlined.CloudOff, contentDescription = null) },
-            title = { Text("Scollegare il server?") },
+            title = { Text(stringResource(R.string.srv_disconnect_title)) },
             text = {
-                Text(
-                    if (follow) "Il telefono smette di ricevere le glicemie e il suo codice di accesso viene revocato."
-                    else "Il telefono smette di caricare le glicemie e il suo codice di accesso viene revocato. " +
-                        "Il collegamento al sensore continua e le letture restano sul telefono."
-                )
+                Text(stringResource(if (follow) R.string.srv_disconnect_follow else R.string.srv_disconnect_upload))
             },
-            confirmButton = { TextButton(onClick = { confirm = false; actions.onDisconnect() }) { Text("Scollega") } },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annulla") } },
+            confirmButton = { TextButton(onClick = { confirm = false; actions.onDisconnect() }) { Text(stringResource(R.string.action_disconnect)) } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
 }
