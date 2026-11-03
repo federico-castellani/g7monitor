@@ -20,6 +20,9 @@ data class GlucoseReading(
 }
 
 /** Blood glucose from a meter (finger stick): kept apart from the sensor's readings. */
+/** Where readings are sent; each keeps its own "already sent" flag, so backfilled readings go to both. */
+enum class UploadTarget(internal val column: String) { Server("uploaded"), Nightscout("ns_uploaded") }
+
 data class Fingerstick(
     val timestamp: Long,
     val mgdl: Int,
@@ -32,7 +35,7 @@ data class Fingerstick(
  * no annotation processing needed. Readings within ±2 minutes are de-duplicated.
  */
 class ReadingStore(context: Context) :
-    SQLiteOpenHelper(context, "readings.db", null, 3) {
+    SQLiteOpenHelper(context, "readings.db", null, 4) {
 
     private val _changes = MutableStateFlow(0L)
 
@@ -46,6 +49,13 @@ class ReadingStore(context: Context) :
         )
         db.execSQL(PENDING_INDEX)
         createFingersticks(db)
+        addNightscout(db)
+    }
+
+    private fun addNightscout(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE readings ADD COLUMN ns_uploaded INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE fingersticks ADD COLUMN ns_uploaded INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("CREATE INDEX readings_ns_pending ON readings(ts) WHERE ns_uploaded = 0")
     }
 
     private fun createFingersticks(db: SQLiteDatabase) {
@@ -63,6 +73,7 @@ class ReadingStore(context: Context) :
             db.execSQL(PENDING_INDEX)
         }
         if (oldVersion < 3) createFingersticks(db)
+        if (oldVersion < 4) addNightscout(db)
     }
 
     init {
@@ -85,7 +96,7 @@ class ReadingStore(context: Context) :
         db.beginTransaction()
         try {
             val dupCheck = db.compileStatement("SELECT COUNT(*) FROM readings WHERE ts BETWEEN ? AND ?")
-            val values = ContentValues(5)
+            val values = ContentValues(6)
             for (r in list) {
                 dupCheck.bindLong(1, r.timestamp - DEDUPE_MS)
                 dupCheck.bindLong(2, r.timestamp + DEDUPE_MS)
@@ -96,6 +107,7 @@ class ReadingStore(context: Context) :
                 if (r.trend != null) values.put("trend", r.trend) else values.putNull("trend")
                 values.put("source", r.source.ordinal)
                 values.put("uploaded", if (fromServer) 1 else 0)
+                values.put("ns_uploaded", if (fromServer) 1 else 0)
                 if (db.insert("readings", null, values) != -1L) added++
             }
             dupCheck.close()
@@ -119,14 +131,15 @@ class ReadingStore(context: Context) :
         }
     }
 
-    /** Oldest readings not yet sent to the server. */
-    suspend fun pendingUpload(limit: Int): List<GlucoseReading> = query("WHERE uploaded = 0 ORDER BY ts LIMIT ?", limit.toLong())
+    /** Oldest readings not yet sent to [target]. */
+    suspend fun pendingUpload(limit: Int, target: UploadTarget = UploadTarget.Server): List<GlucoseReading> =
+        query("WHERE ${target.column} = 0 ORDER BY ts LIMIT ?", limit.toLong())
 
-    suspend fun markUploaded(list: List<GlucoseReading>) = withContext(Dispatchers.IO) {
+    suspend fun markUploaded(list: List<GlucoseReading>, target: UploadTarget = UploadTarget.Server) = withContext(Dispatchers.IO) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val update = db.compileStatement("UPDATE readings SET uploaded = 1 WHERE ts = ?")
+            val update = db.compileStatement("UPDATE readings SET ${target.column} = 1 WHERE ts = ?")
             for (r in list) {
                 update.bindLong(1, r.timestamp)
                 update.executeUpdateDelete()
@@ -136,6 +149,16 @@ class ReadingStore(context: Context) :
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * Newly connected Nightscout: only what is newer than [from] is sent (older history would
+     * duplicate what another uploader may already have put there).
+     */
+    suspend fun resetNightscout(from: Long) = withContext(Dispatchers.IO) {
+        val cutoff = arrayOf<Any>(from)
+        writableDatabase.execSQL("UPDATE readings SET ns_uploaded = CASE WHEN ts < ? THEN 1 ELSE 0 END", cutoff)
+        writableDatabase.execSQL("UPDATE fingersticks SET ns_uploaded = CASE WHEN ts < ? THEN 1 ELSE 0 END", cutoff)
     }
 
     /** New server or account: everything stored locally is sent again (the server ignores duplicates). */
@@ -178,7 +201,7 @@ class ReadingStore(context: Context) :
         db.beginTransaction()
         try {
             val dup = db.compileStatement("SELECT COUNT(*) FROM fingersticks WHERE ts BETWEEN ? AND ? AND mgdl = ?")
-            val values = ContentValues(4)
+            val values = ContentValues(5)
             for (f in list) {
                 dup.bindLong(1, f.timestamp - FINGERSTICK_DEDUPE_MS)
                 dup.bindLong(2, f.timestamp + FINGERSTICK_DEDUPE_MS)
@@ -189,6 +212,7 @@ class ReadingStore(context: Context) :
                 values.put("mgdl", f.mgdl)
                 if (f.meter != null) values.put("meter", f.meter) else values.putNull("meter")
                 values.put("uploaded", if (fromServer) 1 else 0)
+                values.put("ns_uploaded", if (fromServer) 1 else 0)
                 if (db.insert("fingersticks", null, values) != -1L) added++
             }
             dup.close()
@@ -202,7 +226,8 @@ class ReadingStore(context: Context) :
 
     suspend fun fingersticksSince(from: Long): List<Fingerstick> = fingersticks("WHERE ts >= ? ORDER BY ts", from)
 
-    suspend fun pendingFingersticks(limit: Int): List<Fingerstick> = fingersticks("WHERE uploaded = 0 ORDER BY ts LIMIT ?", limit.toLong())
+    suspend fun pendingFingersticks(limit: Int, target: UploadTarget = UploadTarget.Server): List<Fingerstick> =
+        fingersticks("WHERE ${target.column} = 0 ORDER BY ts LIMIT ?", limit.toLong())
 
     suspend fun newestFingerstick(): Long? = withContext(Dispatchers.IO) {
         readableDatabase.rawQuery("SELECT MAX(ts) FROM fingersticks", null).use { c ->
@@ -210,11 +235,11 @@ class ReadingStore(context: Context) :
         }
     }
 
-    suspend fun markFingersticksUploaded(list: List<Fingerstick>) = withContext(Dispatchers.IO) {
+    suspend fun markFingersticksUploaded(list: List<Fingerstick>, target: UploadTarget = UploadTarget.Server) = withContext(Dispatchers.IO) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val update = db.compileStatement("UPDATE fingersticks SET uploaded = 1 WHERE ts = ? AND mgdl = ?")
+            val update = db.compileStatement("UPDATE fingersticks SET ${target.column} = 1 WHERE ts = ? AND mgdl = ?")
             for (f in list) {
                 update.bindLong(1, f.timestamp)
                 update.bindLong(2, f.mgdl.toLong())

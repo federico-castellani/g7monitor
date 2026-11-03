@@ -39,6 +39,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
+import it.federico.g7monitor.data.BuiltInCertificate
 
 /**
  * Drives the whole G7 cycle: find sensor -> connect -> authenticate (J-PAKE) ->
@@ -304,7 +305,9 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         auth?.takeIf { authFor == id }?.let { return it }
         val s = app.settings.current()
         val saved = app.settings.authKey(mac)?.let { runCatching { it.hexToBytes() }.getOrNull() }
-        val certs = if (s.hasCertificates) G7Certificates.fromHex(s.certP1, s.certP2, s.certP3) else null
+        // The user's own certificate, or xDrip's public one shipped with the app.
+        val certs = (if (s.hasCertificates) G7Certificates.fromHex(s.certP1, s.certP2, s.certP3) else null)
+            ?: BuiltInCertificate.get(app)
         return G7Auth(code, saved, certs) { log(it) }.also { auth = it; authFor = id }
     }
 

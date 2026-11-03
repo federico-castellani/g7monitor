@@ -57,6 +57,12 @@ data class AppSettings(
     val uploadPaused: Boolean = false,
     val lastUploadAt: Long? = null,
     val uploadError: String? = null,
+    /** Nightscout site (https base URL) and its API_SECRET or access token; sensor mode only. */
+    val nightscoutUrl: String = "",
+    val nightscoutSecret: String = "",
+    val nightscoutPaused: Boolean = false,
+    val lastNightscoutAt: Long? = null,
+    val nightscoutError: String? = null,
     /** Follower mode: server to download from, account and read-only token. */
     val followUrl: String = "",
     val followUser: String = "",
@@ -72,6 +78,7 @@ data class AppSettings(
 ) {
     val hasCertificates get() = certP1.isNotBlank() && certP2.isNotBlank() && certP3.isNotBlank()
     val serverConnected get() = serverUrl.isNotBlank() && serverToken.isNotBlank()
+    val nightscoutConnected get() = nightscoutUrl.isNotBlank() && nightscoutSecret.isNotBlank()
     val followConnected get() = followUrl.isNotBlank() && followToken.isNotBlank()
 }
 
@@ -100,6 +107,11 @@ class SettingsRepository(private val context: Context) {
         val uploadPaused = booleanPreferencesKey("upload_paused")
         val lastUpload = longPreferencesKey("last_upload_at")
         val uploadError = stringPreferencesKey("upload_error")
+        val nsUrl = stringPreferencesKey("nightscout_url")
+        val nsSecret = stringPreferencesKey("nightscout_secret")
+        val nsPaused = booleanPreferencesKey("nightscout_paused")
+        val nsLast = longPreferencesKey("nightscout_last_at")
+        val nsError = stringPreferencesKey("nightscout_error")
         val source = stringPreferencesKey("data_source")
         val followUrl = stringPreferencesKey("follow_url")
         val followUser = stringPreferencesKey("follow_user")
@@ -146,6 +158,11 @@ class SettingsRepository(private val context: Context) {
         uploadPaused = this[K.uploadPaused] ?: false,
         lastUploadAt = this[K.lastUpload],
         uploadError = this[K.uploadError],
+        nightscoutUrl = this[K.nsUrl] ?: "",
+        nightscoutSecret = SecretBox.open(this[K.nsSecret]),
+        nightscoutPaused = this[K.nsPaused] ?: false,
+        lastNightscoutAt = this[K.nsLast],
+        nightscoutError = this[K.nsError],
         followUrl = this[K.followUrl] ?: "",
         followUser = this[K.followUser] ?: "",
         followToken = SecretBox.open(this[K.followToken]),
@@ -240,6 +257,27 @@ class SettingsRepository(private val context: Context) {
     suspend fun setUploadWifiOnly(v: Boolean) = context.dataStore.edit { it[K.wifiOnly] = v }
     suspend fun setUploadPaused(v: Boolean) = context.dataStore.edit { it[K.uploadPaused] = v }
 
+    suspend fun setNightscout(url: String, secret: String) = context.dataStore.edit {
+        it[K.nsUrl] = url
+        it[K.nsSecret] = SecretBox.seal(secret)
+        it.remove(K.nsLast)
+        it.remove(K.nsError)
+    }
+
+    /** Forgets the secret (the address stays, to reconnect easily). */
+    suspend fun disconnectNightscout() = context.dataStore.edit {
+        it.remove(K.nsSecret)
+        it.remove(K.nsLast)
+        it.remove(K.nsError)
+    }
+
+    suspend fun setNightscoutPaused(v: Boolean) = context.dataStore.edit { it[K.nsPaused] = v }
+
+    suspend fun setNightscoutResult(at: Long?, error: String?) = context.dataStore.edit {
+        if (at != null) it[K.nsLast] = at
+        if (error == null) it.remove(K.nsError) else it[K.nsError] = error
+    }
+
     /** Written only when something changes, to keep DataStore writes rare. */
     suspend fun setUploadResult(at: Long?, error: String?) = context.dataStore.edit {
         if (at != null) it[K.lastUpload] = at
@@ -255,7 +293,7 @@ class SettingsRepository(private val context: Context) {
 
     /** Secrets written in plain text by older versions: encrypted once, at start. */
     suspend fun encryptOldSecrets() = context.dataStore.edit { prefs ->
-        val secrets = listOf(K.serverToken, K.followToken, K.p1, K.p2, K.p3) +
+        val secrets = listOf(K.serverToken, K.followToken, K.nsSecret, K.p1, K.p2, K.p3) +
             prefs.asMap().keys.filter { it.name.startsWith("key_") }.map { stringPreferencesKey(it.name) }
         for (key in secrets) {
             val v = prefs[key] ?: continue

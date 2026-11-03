@@ -1,181 +1,150 @@
 # G7 Monitor
 
-App Android moderna per leggere la glicemia direttamente da un **Dexcom G7** via Bluetooth, ispirata a [xDrip+](https://github.com/NightscoutFoundation/xDrip) ma con un'interfaccia nuova in Jetpack Compose / Material 3.
+An Android app that reads glucose directly from a **Dexcom G7** sensor over Bluetooth, with a modern Jetpack Compose / Material 3 interface. The G7 protocol is ported from [xDrip+](https://github.com/NightscoutFoundation/xDrip). A companion Wear OS app shows the glucose on your watch face and rings the alarms on your wrist.
 
-> ⚠️ **Non è un dispositivo medico.** Progetto personale/sperimentale: non usarlo per decisioni terapeutiche senza verificare con un dispositivo approvato.
+> ⚠️ **This is not a medical device.** It is a personal, experimental project. Do not make treatment decisions without checking with an approved device.
 
-## Cosa fa
+The app is in English and Italian and follows the phone's language. On Android 13 and later you can also pick a language for the app only, in *Android Settings → Apps → G7 Monitor → Language*.
 
-- Trova il sensore G7 (nome `DXCM…`), si collega e si autentica con il **codice di abbinamento a 4 cifre**
-- Riceve la glicemia ogni 5 minuti e recupera automaticamente le letture perse (backfill, fino a 24 h)
-- Mostra valore attuale, freccia di tendenza, variazione, minuti trascorsi
-- Grafico 3 / 6 / 12 / 24 h con fascia target, tocca/trascina per vedere il singolo valore
-- Statistiche: tempo in target, media, numero letture
-- Stato sensore: riscaldamento (30 min), giorno di utilizzo, scadenza (10 giorni + 12 h)
-- Notifica persistente con l'ultima glicemia, riavvio automatico dopo il reboot
-- **Glucometro Bluetooth**, in modalità sensore: lo abbini una volta da *Impostazioni → Glucometro*, con il PIN mostrato dal glucometro. Funziona con i glucometri che usano il profilo standard Bluetooth "Glucose": Contour Next One, Accu-Chek Guide e Instant, OneTouch Verio Flex e Select Plus Flex, CareSens e altri.
-  - Dopo ogni misurazione il telefono riceve il risultato da solo, perché attende il glucometro con una connessione in sospeso che consuma pochissimo.
-  - Scarica solo le misurazioni nuove (numero progressivo), ignora quelle con liquido di controllo e corregge l'orologio del glucometro se è sbagliato.
-  - Le misurazioni compaiono come rombi sul grafico, restano separate da quelle del sensore e non fanno scattare gli allarmi.
-  - Vengono caricate sul server e arrivano in tempo reale al sito e ai telefoni che ricevono.
-- **Allarmi**: molto bassa, bassa, alta, molto alta, discesa rapida, salita rapida, mancanza di segnale.
-  - Ognuno ha soglia, durata del posticipo, suono, volume e modalità (suono e vibrazione, solo vibrazione, solo suono) configurabili.
-  - Suonano sul canale "sveglia", anche in silenzioso, con una pagina a tutto schermo sopra la schermata di blocco. Se nessuno reagisce risuonano a ogni nuova lettura.
-  - Per **disattivare** un allarme serve lo sblocco del telefono (PIN, sequenza, password o biometria).
-  - I suoni sono generati da `tools/gen_alarm_sounds.py`.
-- mg/dL o mmol/L, intervallo target configurabile, tema chiaro/scuro con colori dinamici (Material You)
-- Import del certificato G7 ("G Key" di xDrip) scansionando il QR code
-- Schermata **Diagnostica**: stato del collegamento, dispositivi Bluetooth vicini in tempo reale, registro eventi copiabile
-- **Due modalità**, scelte al primo avvio e modificabili da *Impostazioni → Origine dei dati*. Ognuna mostra solo le proprie impostazioni:
-  - **Sensore G7**: il telefono si collega al sensore. Il server è facoltativo: da *Impostazioni → Server (caricamento)* si inserisce l'indirizzo e, se il server risponde, le credenziali; da quel momento le glicemie vengono caricate. Il caricamento parte subito dopo ogni lettura, senza risvegli extra; a scelta ogni 15/30/60 minuti o solo con Wi-Fi. Quando colleghi o ricolleghi il server, ad esempio dopo un reset, il telefono:
-    - scarica dal server le ultime 24 ore, così il grafico è subito completo;
-    - invia tutte le letture che ha;
-    - lascia che il server scarti i doppioni.
-  - **Server**: il telefono riceve le glicemie da un **G7 Monitor Server** (progetto separato), senza sensore. Basta un account in sola lettura. Il telefono chiede i dati solo quando è attesa una nuova lettura, circa ogni 5 minuti, senza tenere una connessione sempre aperta.
-- Verso il server solo HTTPS, con un codice di accesso revocabile per ogni telefono. La password non resta sul telefono.
-- In italiano e in inglese: l'app e l'orologio seguono la lingua del telefono. Le altre lingue usano l'inglese. Da Android 13 la lingua si può scegliere anche solo per l'app, in *Impostazioni di Android → App → G7 Monitor → Lingua*.
+## Features
 
-## Tecnologie
+- **Sensor**: finds the G7, connects with the 4-digit pairing code, receives a reading every 5 minutes and fills in missed readings automatically (backfill, up to 24 h).
+- **Home**: current value, trend arrow, change since the previous reading, time since the last reading, sensor day and expiry, warm-up countdown.
+- **Chart**: 3 / 6 / 12 / 24 h with the target range; touch and drag to read single values. Optional line smoothing, reading dots and glucose meter markers (*Settings → Chart*).
+- **Statistics**: time in range, average, number of readings.
+- **Alarms**: urgent low, low, high, urgent high, falling fast, rising fast, signal loss. Each has its own threshold, snooze time, sound, volume and mode (sound and vibration, vibration only, sound only).
+- **Notification** with the latest value and a small chart; optionally the **glucose number in the status bar** instead of the app icon.
+- **Home screen widget** with value, arrow and a 3-hour chart.
+- **Bluetooth glucose meter** (optional), for meter checks next to the sensor values.
+- **Upload** to a [G7 Monitor Server](https://github.com/federico-castellani/g7monitor-server) and/or to **Nightscout**.
+- **Follower mode**: another phone can show the same glucose, received from a G7 Monitor Server, with no sensor.
+- **Wear OS**: complications for any watch face, and alarms on the watch with a full-screen page and a snooze button.
+- mg/dL or mmol/L, adjustable target range, light and dark theme with dynamic colours.
 
-- **Kotlin** + **Coroutines/Flow** (efficiente, nessuna libreria pesante)
-- **Jetpack Compose + Material 3** per la UI, grafico disegnato a mano su `Canvas`
-- Crittografia J-PAKE su curva P-256 **implementata in Kotlin puro** (xDrip usa BouncyCastle: qui l'APK resta piccolo)
-- SQLite diretto per le letture, DataStore per le impostazioni
-- Foreground service di tipo `connectedDevice`; minSdk 31 (Android 12+), quindi niente permesso di posizione
-- Testi nei file `res/values/strings.xml` (inglese, lingua predefinita) e `res/values-it/strings.xml` (italiano), per l'app e per l'orologio. Per aggiungere una lingua basta una cartella `values-xx` con le stesse chiavi.
+## Requirements
 
-## Installare l'app (senza Android Studio)
+- Android 12 or later, with Bluetooth.
+- For the watch: Wear OS 3 or later (Galaxy Watch 4 and newer).
 
-1. Dal telefono apri **[l'ultima versione](https://github.com/federico-castellani/g7monitor/releases/latest)** e tocca **G7Monitor-X.Y.Z.apk** (il file *G7Monitor-Wear* è per l'orologio).
-2. Apri il file scaricato. La prima volta Android chiede di consentire l'installazione dal browser: *Impostazioni → consenti da questa fonte*, poi torna indietro e tocca **Installa**.
-3. Se Android dice *"App non installata"* e hai già una versione di G7 Monitor compilata in altro modo, disinstallala prima (succede una sola volta, perché la firma è diversa).
+## Installing the app
 
-**Aggiornamenti:** l'app controlla da sola se c'è una nuova versione quando la apri. Compare la scheda *Aggiornamento disponibile* in Home (o in *Impostazioni → Aggiornamenti*): tocca **Aggiorna** e conferma nella finestra di Android. La prima volta Android chiede di consentire a G7 Monitor di installare app: attivalo, torna indietro e tocca di nuovo Aggiorna. Impostazioni, abbinamenti e letture restano.
+1. On the phone, open the **[latest release](https://github.com/federico-castellani/g7monitor/releases/latest)** and tap **G7Monitor-X.Y.Z.apk** (the *G7Monitor-Wear* file is for the watch).
+2. Open the downloaded file. The first time, Android asks to allow installs from the browser: allow it, go back and tap **Install**.
+3. If Android says *"App not installed"* and you already have a G7 Monitor built some other way, uninstall it first (this happens only once, because the signature differs).
 
-## Pubblicare una versione
+**Updates:** the app checks for new versions by itself when you open it. An *Update available* card appears on the home screen (and in *Settings → Updates*): tap **Update** and confirm. The first time, Android asks to allow G7 Monitor to install apps: turn it on, go back and tap Update again. Settings, pairings and readings are kept.
 
-Le versioni si pubblicano da GitHub: il workflow [`release.yml`](.github/workflows/release.yml) compila l'app e l'app per l'orologio, le firma con la chiave di rilascio e crea la *Release* con gli APK.
+## First setup
 
-**Una volta sola**, aggiungi i segreti in *Settings → Secrets and variables → Actions → New repository secret*:
+1. On first start choose **From the G7 sensor** (or **From the server** to follow someone else's glucose, see [Follower mode](#follower-mode)).
+2. **Settings → G7 sensor**: enter the **pairing code** printed on the G7 applicator and tap *Save code*.
+3. **Certificate:** nothing to do. On its first pairing with a new phone the G7 asks for an application certificate; the app already includes xDrip's public **"G Key"** ([`G7_keks_QR.png`](G7_keks_QR.png)) and uses it by itself. To use a different one, go to *Settings → G7 sensor → G7 certificate → Use another certificate*: scan its QR, paste its text (`xdp2:…`) or enter the three hex values (`keks_p1`, `keks_p2`, `keks_p3`).
 
-| Segreto | Contenuto |
-|---|---|
-| `G7_KEYSTORE_BASE64` | il file `.jks` della chiave di rilascio codificato in base64 |
-| `G7_KEYSTORE_PASSWORD` | la password della chiave |
-| `G7_KEY_ALIAS` | l'alias della chiave (`g7monitor`) |
+4. **Settings → Background service → Run as a service**, and allow the Bluetooth and notification permissions. The service starts by itself when the phone turns on.
+5. In the same page tap **Allow** to remove battery restrictions, so readings keep arriving with the screen off. On Samsung phones also add G7 Monitor to *Battery → Background usage limits → Never sleeping apps*.
+6. When the app connects for the first time, Android may ask to **pair** with a `DXCM…` device: accept.
 
-**Ogni versione:** dalla scheda *Actions → Release → Run workflow* scrivi la versione (es. `0.3.0`), oppure dal PC:
-```
-git tag v0.3.0
-git push origin v0.3.0
-```
-La versione deve crescere ogni volta (`X.Y.Z`, `versionCode` = X·10000 + Y·100 + Z). Le note della Release si generano dai commit; puoi modificarle dopo dalla pagina GitHub, e l'app le mostra in *Impostazioni → Aggiornamenti*.
+Things to know:
+- **Use only one collector on the phone.** If xDrip is installed with G7 collection on, turn it off, or the two apps will fight over the sensor.
+- **Other devices** connected to the sensor (pump, receiver) keep working: the app uses the same authentication slot as xDrip on a phone.
+- **New sensor:** enter the new pairing code. If the connection gets stuck, *Settings → G7 sensor → Forget sensor* removes the old key and Bluetooth pairing.
 
-La chiave di rilascio non è nel repository (vedi `.gitignore`): **conservala con un backup**. Se la perdi non si possono più pubblicare aggiornamenti installabili sopra quelli esistenti. Per compilare in locale con la stessa chiave crea `keystore.properties` nella cartella del progetto con `storeFile`, `storePassword`, `keyAlias`, `keyPassword`; senza, le build release usano la chiave di debug.
+## Alarms
 
-## Compilarlo da sorgente
+Set them in the **Alarms** tab: tap an alarm for its threshold, snooze time, sound, volume and mode.
 
-Requisiti: Android Studio recente, **JDK 21** come Gradle JDK (*Settings → Build Tools → Gradle → Gradle JDK*), telefono con Android 12 o successivo.
+- They ring on the phone's **alarm** channel, also in silent mode, with a full-screen page on the lock screen.
+- **Snooze** silences that alarm for its snooze time. If nobody reacts, it rings again at every new reading while the condition is still true.
+- Turning an alarm **off** (or stopping the service) needs the phone to be unlocked (PIN, pattern, password or biometrics).
+- The switch at the top pauses **all** alarms for a while, or until you turn them back on.
+- **Test alarm** sets one off as if it were real, marked as a test; *Test in 10 s* gives you time to lock the phone.
+- The alarms page shows a warning when something would keep an alarm from being heard (notifications off, alarm volume at zero, data collection off).
 
-1. Apri **Android Studio** → *Open* → seleziona la cartella del progetto (oppure *File → New → Project from Version Control* con l'URL del repository).
-2. Attendi la sincronizzazione Gradle (scarica le dipendenze la prima volta).
-3. Collega il telefono con il *debug USB* attivo e premi **Run ▶**.
-   In alternativa: `gradlew assembleDebug` e installa `app/build/outputs/apk/debug/app-debug.apk`.
-4. Al primo avvio scegli **Dal sensore G7** (oppure **Dal server** per ricevere le glicemie di un'altra persona, e segui le schermate indirizzo → credenziali).
-   Poi ⚙️ **Impostazioni** → inserisci il **codice di abbinamento** (sull'applicatore del G7) → *Salva codice* → attiva **Raccolta dati** e concedi i permessi Bluetooth e notifiche.
-5. Consigliato: in *Affidabilità* premi **Consenti** per disattivare l'ottimizzazione batteria.
-6. Al primo collegamento Android può chiedere di **abbinare** il dispositivo `DXCM…`: accetta.
+## Uploading and following
 
-### Note importanti
+All uploads use HTTPS only. Readings recovered by the backfill are uploaded too.
 
-- **Usa un solo collettore sul telefono.** Se xDrip è installato con la raccolta G7 attiva, disattivala, altrimenti le due app si contendono il sensore.
-- **Certificato (keks / "G Key").** Il G7, al primo abbinamento con un telefono nuovo, chiede un certificato applicativo. Se manca, l'autenticazione riesce ma il sensore risponde "non abbinato" e l'app mostra *"Il sensore richiede i certificati"*. **Questa app non lo include**: è lo stesso che xDrip carica dal QR code "G Key" (preferenze `keks_p1`, `keks_p2`, `keks_p3`). Importalo da *Impostazioni → Certificato G7*: puoi **scansionare il QR** (`xdp2:…`), incollarne il testo, oppure inserire i tre valori esadecimali. Dopo il primo abbinamento non serve più per quel sensore.
-- **Altri dispositivi collegati al sensore** (microinfusore, ricevitore) continuano a funzionare: l'app usa lo stesso canale di autenticazione di xDrip (slot 2).
-- **Problemi?** Apri *Diagnostica* (icona in alto nella Home): mostra se il G7 è visibile, lo stato del collegamento e, con *Mostra registro eventi*, ogni passo dell'autenticazione. Il pulsante *Copia* permette di condividere il registro. Lo stesso registro è in Logcat con il filtro `G7Collector`.
+### G7 Monitor Server
 
-## Smartwatch Wear OS (complicazioni)
+*Settings → Server (uploading)*: enter the address of your [G7 Monitor Server](https://github.com/federico-castellani/g7monitor-server), then an account allowed to upload. The password is used only once: the phone keeps an access code that you can revoke from the website.
 
-Il modulo `wear` è un'app per l'orologio, come GlucoDataHandler: riceve la glicemia dal telefono e la espone come **complicazioni** da aggiungere ai quadranti, compresi quelli Samsung. Funziona in entrambe le modalità del telefono, sensore e server.
+- Readings are sent right after they arrive; optionally every 15/30/60 minutes, or on Wi-Fi only.
+- **Uploads paused** keeps the connection but holds the readings on the phone; they all go out when you turn it back on.
+- When you connect (or reconnect) the server, the phone downloads the last 24 hours from it and uploads everything it has; the server ignores duplicates.
 
-| Complicazione | Tipi | Mostra |
+### Nightscout
+
+*Settings → Nightscout*: enter your Nightscout address and either the site's **API_SECRET** or an **access token** allowed to upload (created in Nightscout's *Admin tools*). The app checks them before saving.
+
+- Sensor readings are sent as SGV entries with their trend arrow; glucose meter results as *BG Check* treatments.
+- On connecting, the last 24 hours are sent; then every new reading. Older history is not sent, so it does not duplicate what another uploader (such as xDrip) may already have put there.
+- It works together with the G7 Monitor Server or on its own, and can be paused without forgetting the secret.
+
+### Follower mode
+
+Choose **From the server** on first start, or later in *Settings → Data source*. The phone then receives the glucose from a G7 Monitor Server with no sensor, with the same home screen, chart, notification, widget, alarms and watch. A **read-only** account is enough. The phone keeps a live connection with the server when it can, otherwise it asks only when a new reading is due (about every 5 minutes).
+
+## Glucose meter
+
+*Settings → Glucose meter* pairs a Bluetooth meter that uses the standard Bluetooth "Glucose" profile: Contour Next One, Accu-Chek Guide and Instant, OneTouch Verio Flex and Select Plus Flex, CareSens and others.
+
+1. Put the meter in pairing mode (usually *Settings → Bluetooth / Wireless → Pair*; on the Contour Next One hold OK until the Bluetooth symbol flashes).
+2. Tap **Search** and choose the meter.
+3. Enter the PIN shown on the meter's display.
+
+After every measurement the meter sends the result to the phone by itself within a few seconds. Results appear as purple diamonds on the chart, with the difference from the sensor at the same time. They are uploaded to the server and to Nightscout, and they never set off alarms. Control solution tests are ignored, and a wrong meter clock is corrected.
+
+## Display options
+
+- **Settings → Display**: mg/dL or mmol/L, target range, and **Glucose in the status bar** (off by default). When on, the status bar shows the current value instead of the app icon; the icon comes back after 15 minutes without readings.
+- **Settings → Chart**: line smoothing (*None*: straight lines; *Light*: a soft curve through every reading; *Strong*: a curve on the average of about 20 minutes), reading dots, glucose meter markers. The chart range chosen on the home screen is remembered.
+
+## Wear OS watch
+
+The watch app receives the glucose from the phone; it works in both sensor and follower mode.
+
+### Complications
+
+| Complication | Types | Shows |
 |---|---|---|
-| **Glicemia** | testo breve, testo lungo, indicatore | `123` grande con la freccia come icona; `123 mg/dL ↗ +4`; indicatore da 40 a 300 mg/dL |
-| **Glicemia: variazione** | testo breve | `+4` rispetto alla lettura precedente, sotto i minuti dall'ultima lettura (`3m`) |
-| **Glicemia: ultima lettura** | testo breve | minuti dall'ultima lettura |
+| **Glucose** | short text, long text, ranged value | large `123` with the trend arrow as an icon; `123 mg/dL ↗ +4`; a gauge from 40 to 300 mg/dL |
+| **Glucose: change** | short text | `+4` since the previous reading, with the minutes since the last reading (`3m`) |
+| **Glucose: last reading** | short text | minutes since the last reading |
 
-Batteria:
-- l'orologio non chiede mai dati: è il telefono a inviarli, uno per lettura;
-- i minuti trascorsi li conta il quadrante da solo;
-- dopo 15 minuti senza letture il valore diventa `---` senza bisogno di svegliare l'orologio.
+To add one: long-press the watch face → *Customise* → tap a complication slot → *G7 Monitor*. Tapping a complication opens the glucose screen on the watch.
 
-Toccando una complicazione si apre la schermata della glicemia sull'orologio.
+Battery: the watch never asks for data (the phone sends each reading), the watch face counts the minutes by itself, and after 15 minutes without readings the value turns into `---` without waking the watch.
 
-### Installazione sull'orologio (Galaxy Watch 4 o successivo, Wear OS 3+)
-Serve un computer **solo la prima volta**: dopo, l'app dell'orologio si aggiorna da sola. Nell'app del telefono, *Impostazioni → Orologio* mostra se l'orologio ha G7 Monitor e se è aggiornato.
+### Alarms on the watch
 
-1. Sull'orologio: *Impostazioni → Info sull'orologio → Informazioni sul software*, tocca 5 volte *Versione software*. Poi *Opzioni sviluppatore*: attiva *Debug ADB* e *Debug wireless* (orologio e computer sulla stessa rete Wi-Fi) e tocca *Abbina nuovo dispositivo*.
-2. Sul computer scarica ed esegui lo script, che trova o scarica `adb`, scarica l'ultima versione per l'orologio e la installa chiedendoti solo indirizzo e codice mostrati dall'orologio:
-   - Windows: [`tools/installa-orologio.ps1`](tools/installa-orologio.ps1), poi `powershell -ExecutionPolicy Bypass -File .\installa-orologio.ps1`
-   - Mac/Linux: [`tools/installa-orologio.sh`](tools/installa-orologio.sh), poi `sh installa-orologio.sh`
-3. Apri G7 Monitor sull'orologio e consenti le notifiche. Puoi spegnere il *Debug wireless*.
-4. Sul quadrante: tieni premuto → *Personalizza* → tocca una complicazione → *G7 Monitor* → scegli *Glicemia*, *Glicemia: variazione* o *Glicemia: ultima lettura*.
+When an alarm rings on the phone, the watch shows a full-screen page with the alarm and the value, and vibrates. **Snooze** on the watch silences the alarm on the phone too. The page closes by itself when the alarm stops on the phone.
 
-**Aggiornamenti:** quando l'app del telefono si aggiorna, sull'orologio compare una notifica; toccala e conferma. L'orologio scarica `G7Monitor-Wear-X.Y.Z.apk` dalla stessa [Release](https://github.com/federico-castellani/g7monitor/releases/latest) e lo installa con il programma di installazione di Android. Anche aprendo l'app sull'orologio, se c'è una versione nuova compare il pulsante *Aggiorna*.
+### Installing on the watch
 
-Telefono e orologio devono avere la **stessa firma**: usa gli APK delle Release, oppure compilali entrambi dallo stesso PC.
+A computer is needed **only the first time**; after that the watch app updates itself. On the phone, *Settings → Watch* shows whether the watch has G7 Monitor and whether it is up to date.
 
-I dati arrivano alla prossima lettura, oppure subito se apri G7 Monitor sull'orologio.
+1. On the watch: *Settings → About watch → Software information*, tap *Software version* 5 times. Then in *Developer options* turn on *ADB debugging* and *Wireless debugging* (watch and computer on the same Wi-Fi) and tap *Pair new device*.
+2. On the computer, download and run the install script. It finds or downloads `adb`, downloads the latest watch app and installs it, asking only for the address and code shown on the watch:
+   - Windows: [`tools/installa-orologio.ps1`](tools/installa-orologio.ps1), then `powershell -ExecutionPolicy Bypass -File .\installa-orologio.ps1`
+   - Mac/Linux: [`tools/installa-orologio.sh`](tools/installa-orologio.sh), then `sh installa-orologio.sh`
+3. Open G7 Monitor on the watch and allow notifications. You can turn *Wireless debugging* off.
 
-## Struttura
+**Updates:** when the phone app is updated, a notification appears on the watch; tap it and confirm. The watch downloads the new version from the same [release](https://github.com/federico-castellani/g7monitor/releases/latest). The phone and the watch must have the **same signature**: use the APKs from the releases for both.
 
-```
-app/src/main/java/it/federico/g7monitor/
-├── protocol/            # Kotlin puro, nessuna dipendenza Android (testabile su JVM)
-│   ├── P256.kt          # aritmetica curva ellittica secp256r1
-│   ├── JPake.kt         # EC-J-PAKE + prove zero-knowledge + hash della challenge
-│   ├── G7Auth.kt        # macchina a stati di autenticazione (porting del plugin "keks" di xDrip)
-│   ├── G7Messages.kt    # UUID GATT, comandi, parsing glicemia 0x4E e backfill
-│   └── Bytes.kt
-├── ble/
-│   ├── G7Collector.kt   # ciclo: scansione → connessione → auth → dati → backfill → disconnessione
-│   ├── GattClient.kt    # wrapper GATT a coroutine (una operazione per volta)
-│   ├── BondHelper.kt    # abbinamento Bluetooth
-│   └── G7Service.kt     # foreground service, notifica, watchdog, avvio al boot
-├── data/                # SQLite letture, impostazioni, stato sensore, registro eventi
-├── net/                 # server G7 Monitor: caricamento (Uploader) e ricezione (Follower)
-├── alarm/               # allarmi: regole (Kotlin puro), motore, suono e vibrazione
-├── watch/               # invio della glicemia allo smartwatch (Wear OS Data Layer)
-├── meter/               # glucometro Bluetooth: profilo "Glucose" (Kotlin puro) e scarico automatico
-└── ui/                  # Compose: Home, grafico, Impostazioni, server, allarmi, Diagnostica
+## Troubleshooting
 
-wear/src/main/java/it/federico/g7monitor/wear/
-├── DataLayerListenerService.kt   # riceve le letture dal telefono
-├── WatchGlucose.kt               # ultima lettura e formattazione
-├── complication/                 # le tre complicazioni
-└── MainActivity.kt               # schermata della glicemia sull'orologio
-```
+- **No readings:** open **Diagnostics** (icon at the top of the home screen). It shows whether the G7 is visible nearby, the connection status and, with *Show event log*, every step of the connection. *Copy log* lets you share it.
+- **"Certificate refused by the sensor":** import another certificate in *Settings → G7 sensor → G7 certificate → Use another certificate*.
+- **"Authentication failed 3 times":** check the pairing code; the app waits 10 minutes before trying that sensor again.
+- **Readings stop with the screen off:** remove the battery restrictions (*Settings → Background service*).
+- **Server or Nightscout errors** are shown in their settings page and in the event log; the app retries by itself, waiting longer after each failure (up to one hour).
 
-### Corrispondenza con il codice di xDrip
+## Building from source
 
-| Questa app | xDrip |
-|---|---|
-| `protocol/G7Auth.kt` | `libkeks/.../jamorham/keks/Plugin.java` |
-| `protocol/JPake.kt` | `libkeks/.../keks/Calc.java`, `Packet.java`, `Context.java` |
-| `protocol/G7Messages.kt` | `g5model/EGlucoseRxMessage2.java`, `BackFillStream.java`, `BackFillTxMessage2.java`, `BluetoothServices.java` |
-| `ble/G7Collector.kt` | `g5model/Ob1G5StateMachine.java` (`doCheckAuth2`, `doNext`, `doGetData`, `backFillIfNeeded`), `services/Ob1G5CollectionService.java` |
+Requirements: a recent Android Studio with **JDK 21** as the Gradle JDK. Open the project folder, wait for the Gradle sync and run the `app` configuration on a phone with USB debugging, or run `gradlew assembleDebug`. Unit tests: `gradlew testDebugUnitTest`.
 
-## Test
+Translations live in `res/values/strings.xml` (English, the default) and `res/values-it/strings.xml` (Italian), for both the app and the watch. To add a language, add a `values-xx` folder with the same keys.
 
-`app/src/test/.../G7ProtocolTest.kt` verifica: aritmetica P-256 contro la crypto di Java, prove ZKP, handshake completo contro un **sensore simulato** (anche con scambio dei certificati), riconnessione con chiave salvata, codice errato, slot di autenticazione, parsing dei pacchetti, import del QR "G Key", firma della challenge.
-Durante lo sviluppo il simulatore è stato verificato facendolo dialogare con il **codice originale di xDrip** (plugin keks + BouncyCastle): stesso esito, stessa chiave di sessione e stessa sequenza di abbinamento. Il protocollo è stato poi provato con un G7 reale.
+## License
 
-Da Android Studio: tasto destro su `G7ProtocolTest` → *Run*, oppure `gradlew testDebugUnitTest`.
-Su GitHub, la action *Android CI* esegue i test e produce l'APK di debug a ogni push (scaricabile dagli *Artifacts* della build).
-
-## Prossimi passi possibili
-
-Allarmi ipo/iper, widget, upload su Nightscout, broadcast verso AndroidAPS, calibrazione, smartwatch.
-
-## Licenza
-
-GPL-3.0 (vedi `LICENSE`). Il protocollo è un porting del codice di xDrip+ (© JamOrHam e contributori, GPLv3), quindi anche questo progetto è GPLv3.
+GPL-3.0 (see `LICENSE`). The G7 protocol is a port of xDrip+ code (© JamOrHam and contributors, GPLv3), so this project is GPLv3 too.

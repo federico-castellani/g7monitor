@@ -103,6 +103,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.runtime.rememberCoroutineScope
 import it.federico.g7monitor.G7App
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.outlined.CloudUpload
 
 class SettingsActions(
     val onPairingCode: (String) -> Unit,
@@ -132,6 +133,7 @@ enum class SettingsPage(@param:StringRes val title: Int) {
     Updates(R.string.page_updates),
     Watch(R.string.page_watch),
     Chart(R.string.page_chart),
+    Nightscout(R.string.page_nightscout),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -176,7 +178,6 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
             if (sensorMode) {
                 val (summary, tint) = when {
                     settings.pairingCode.isBlank() -> stringResource(R.string.menu_sensor_no_code) to warn
-                    !settings.hasCertificates && settings.sensorMac == null -> stringResource(R.string.menu_sensor_no_cert) to warn
                     settings.sensorMac != null -> stringResource(R.string.menu_sensor_paired, settings.pairingCode) to ok
                     else -> stringResource(R.string.menu_sensor_waiting, settings.pairingCode) to null
                 }
@@ -209,6 +210,16 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
                 },
                 onClick = actions.onOpenServer,
             )
+            if (sensorMode) {
+                MenuRow(
+                    Icons.Outlined.CloudUpload, stringResource(R.string.page_nightscout), nightscoutSummary(settings),
+                    when {
+                        !settings.nightscoutConnected || settings.nightscoutPaused -> null
+                        settings.nightscoutError != null -> warn
+                        else -> ok
+                    },
+                ) { actions.onOpenPage(SettingsPage.Nightscout) }
+            }
         }
         MenuGroup(stringResource(R.string.menu_app)) {
             val on = settings.collectorEnabled
@@ -277,6 +288,7 @@ fun SettingsPageScreen(
             SettingsPage.Updates -> Panel { UpdatesPanel(update.state, update.installed, actions.update) }
             SettingsPage.Watch -> WatchSections()
             SettingsPage.Chart -> ChartSections(settings)
+            SettingsPage.Nightscout -> NightscoutSections(settings)
         }
     }
 }
@@ -544,7 +556,7 @@ private fun ServiceSection(settings: AppSettings, running: Boolean, actions: Set
 @Composable
 private fun CertificateSection(settings: AppSettings, actions: SettingsActions) {
     val context = LocalContext.current
-    var manual by rememberSaveable { mutableStateOf(false) }
+    var other by rememberSaveable { mutableStateOf(false) }
     var qrText by rememberSaveable { mutableStateOf("") }
     var p1 by rememberSaveable(settings.certP1) { mutableStateOf(settings.certP1) }
     var p2 by rememberSaveable(settings.certP2) { mutableStateOf(settings.certP2) }
@@ -560,23 +572,26 @@ private fun CertificateSection(settings: AppSettings, actions: SettingsActions) 
             actions.onCertificates(a, b, c)
             error = null
             qrText = ""
+            other = false
             Toast.makeText(context, R.string.cert_imported, Toast.LENGTH_SHORT).show()
         }
     }
 
     SectionCard(stringResource(R.string.cert_title), Icons.Outlined.QrCodeScanner) {
+        // xDrip's public certificate is in the app: importing one is only for those who want another.
+        SettingRow(
+            Icons.Outlined.CheckCircle,
+            stringResource(if (settings.hasCertificates) R.string.cert_own else R.string.cert_builtin),
+            stringResource(if (settings.hasCertificates) R.string.cert_own_text else R.string.cert_builtin_text),
+            iconTint = LocalRangeColors.current.inRange,
+        )
         if (settings.hasCertificates) {
-            SettingRow(
-                Icons.Outlined.CheckCircle, stringResource(R.string.cert_configured),
-                stringResource(R.string.cert_configured_text),
-                iconTint = LocalRangeColors.current.inRange,
-            )
-        } else {
-            Text(
-                stringResource(R.string.cert_explain),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            TextButton(onClick = { actions.onCertificates("", "", "") }) { Text(stringResource(R.string.cert_use_builtin)) }
         }
+        TextButton(onClick = { other = !other }) {
+            Text(stringResource(if (other) R.string.cert_hide_other else R.string.cert_show_other))
+        }
+        if (!other) return@SectionCard
         FilledTonalButton(onClick = {
             GmsBarcodeScanning.getClient(
                 context,
@@ -587,30 +602,24 @@ private fun CertificateSection(settings: AppSettings, actions: SettingsActions) 
         }) {
             Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(if (settings.hasCertificates) R.string.cert_scan_again else R.string.cert_scan))
+            Text(stringResource(R.string.cert_scan))
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-
-        TextButton(onClick = { manual = !manual }) {
-            Text(stringResource(if (manual) R.string.cert_hide_manual else R.string.cert_show_manual))
-        }
-        if (manual) {
-            OutlinedTextField(
-                value = qrText, onValueChange = { qrText = it },
-                label = { Text(stringResource(R.string.cert_qr_text)) },
-                maxLines = 3, modifier = Modifier.fillMaxWidth(),
-            )
-            if (qrText.isNotBlank()) Button(onClick = { importQr(qrText) }) { Text(stringResource(R.string.cert_import_text)) }
-            listOf(Triple("keks_p1", p1) { v: String -> p1 = v }, Triple("keks_p2", p2) { v: String -> p2 = v }, Triple("keks_p3", p3) { v: String -> p3 = v })
-                .forEach { (label, value, set) ->
-                    OutlinedTextField(
-                        value = value, onValueChange = set, label = { Text(label) },
-                        maxLines = 3, modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            val valid = (p1.isBlank() && p2.isBlank() && p3.isBlank()) || G7Certificates.fromHex(p1, p2, p3) != null
-            if (!valid) Text(stringResource(R.string.cert_invalid), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            Button(onClick = { actions.onCertificates(p1, p2, p3); manual = false }, enabled = valid) { Text(stringResource(R.string.cert_save)) }
-        }
+        OutlinedTextField(
+            value = qrText, onValueChange = { qrText = it },
+            label = { Text(stringResource(R.string.cert_qr_text)) },
+            maxLines = 3, modifier = Modifier.fillMaxWidth(),
+        )
+        if (qrText.isNotBlank()) Button(onClick = { importQr(qrText) }) { Text(stringResource(R.string.cert_import_text)) }
+        listOf(Triple("keks_p1", p1) { v: String -> p1 = v }, Triple("keks_p2", p2) { v: String -> p2 = v }, Triple("keks_p3", p3) { v: String -> p3 = v })
+            .forEach { (label, value, set) ->
+                OutlinedTextField(
+                    value = value, onValueChange = set, label = { Text(label) },
+                    maxLines = 3, modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        val valid = (p1.isBlank() && p2.isBlank() && p3.isBlank()) || G7Certificates.fromHex(p1, p2, p3) != null
+        if (!valid) Text(stringResource(R.string.cert_invalid), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        Button(onClick = { actions.onCertificates(p1, p2, p3); other = false }, enabled = valid) { Text(stringResource(R.string.cert_save)) }
     }
 }

@@ -78,6 +78,7 @@ private enum class Screen(val page: SettingsPage? = null) {
     Home, Alarms, Settings,
     SettingsSensor(SettingsPage.Sensor), SettingsService(SettingsPage.Service),
     SettingsDisplay(SettingsPage.Display), SettingsSource(SettingsPage.Source), SettingsUpdates(SettingsPage.Updates), SettingsWatch(SettingsPage.Watch), SettingsChart(SettingsPage.Chart),
+    SettingsNightscout(SettingsPage.Nightscout),
     Diagnostics, ServerAddress, ServerLogin, ServerStatus, AlarmDetail, Meter;
 
     companion object {
@@ -265,7 +266,8 @@ class MainActivity : ComponentActivity() {
                     Box(Modifier.fillMaxSize().padding(bars).consumeWindowInsets(bars)) {
                         when (screen) {
                             Screen.Settings -> SettingsScreen(settings, serviceRunning, update, settingsActions(enableCollector, openServer, open))
-                            Screen.SettingsSensor, Screen.SettingsService, Screen.SettingsDisplay, Screen.SettingsSource, Screen.SettingsUpdates, Screen.SettingsWatch, Screen.SettingsChart -> SettingsPageScreen(
+                            Screen.SettingsSensor, Screen.SettingsService, Screen.SettingsDisplay, Screen.SettingsSource, Screen.SettingsUpdates, Screen.SettingsWatch, Screen.SettingsChart,
+                            Screen.SettingsNightscout -> SettingsPageScreen(
                                 page = screen.page!!,
                                 settings = settings,
                                 serviceRunning = serviceRunning,

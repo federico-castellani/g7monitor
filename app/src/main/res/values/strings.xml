@@ -27,7 +27,6 @@
     <string name="menu_links">Connections</string>
     <string name="menu_app">App</string>
     <string name="menu_sensor_no_code">Enter the pairing code</string>
-    <string name="menu_sensor_no_cert">The certificate for the first pairing is missing</string>
     <string name="menu_sensor_paired">Paired · code %1$s</string>
     <string name="menu_sensor_waiting">Code %1$s · waiting for the sensor</string>
     <string name="menu_meter">Glucose meter</string>
@@ -94,21 +93,22 @@
     <string name="cert_title">G7 certificate</string>
     <string name="cert_bad_qr">QR not recognised: it must be the xDrip \"G Key\" QR (text starting with xdp2:)</string>
     <string name="cert_imported">Certificate imported</string>
-    <string name="cert_configured">Certificate configured</string>
-    <string name="cert_configured_text">Only needed for the first pairing of a new sensor</string>
-    <string name="cert_explain">On the first pairing the G7 asks for an application certificate (in xDrip: \"G Key\"). Import it from the xDrip QR code.</string>
     <string name="cert_empty_qr">Empty QR</string>
     <string name="cert_no_scanner">Scanner not available: %1$s</string>
-    <string name="cert_scan_again">Scan again</string>
     <string name="cert_scan">Scan the xDrip QR</string>
-    <string name="cert_hide_manual">Hide manual entry</string>
-    <string name="cert_show_manual">Paste text or values manually</string>
     <string name="cert_qr_text">QR text (xdp2:…)</string>
     <string name="cert_import_text">Import text</string>
     <string name="cert_invalid">Invalid values</string>
     <string name="cert_save">Save values</string>
     <string name="display_status_number">Glucose in the status bar</string>
     <string name="display_status_number_text">The current value instead of the app icon at the top of the screen. Needs the background service.</string>
+    <string name="cert_builtin">Certificate included</string>
+    <string name="cert_builtin_text">xDrip\'s public \"G Key\" is already in the app: nothing to do.</string>
+    <string name="cert_own">Imported certificate</string>
+    <string name="cert_own_text">Used instead of the one included in the app</string>
+    <string name="cert_use_builtin">Go back to the included certificate</string>
+    <string name="cert_show_other">Use another certificate</string>
+    <string name="cert_hide_other">Hide</string>
 
     <!-- 11_settings_pages -->
 
@@ -458,6 +458,30 @@
     <string name="srv_disconnect_follow">The phone stops receiving the glucose and its access code is revoked.</string>
     <string name="srv_disconnect_upload">The phone stops uploading the glucose and its access code is revoked. The sensor connection continues and the readings stay on the phone.</string>
 
+    <!-- 65_nightscout -->
+
+    <!-- Nightscout -->
+    <string name="page_nightscout">Nightscout</string>
+    <string name="ns_menu_sending">Uploading to %1$s</string>
+    <string name="ns_unauthorized">Nightscout refused the secret: check the API_SECRET or the token (it must be allowed to upload)</string>
+    <string name="ns_error_code">Nightscout error (%1$d)</string>
+    <string name="ns_unreachable">Nightscout unreachable</string>
+    <string name="ns_not_nightscout">There is no Nightscout site at this address</string>
+    <string name="ns_connected_log">nightscout: connected to %1$s</string>
+    <string name="ns_sent_log">nightscout: sent %1$d values</string>
+    <string name="ns_retry_log">nightscout: %1$s (retrying in %2$d min)</string>
+    <string name="ns_explain">Also sends the sensor readings and the glucose meter measurements to your Nightscout site, as xDrip does. It works together with the G7 Monitor server or on its own.</string>
+    <string name="ns_address">Nightscout address</string>
+    <string name="ns_address_example">mysite.example.com</string>
+    <string name="ns_secret">API_SECRET or token</string>
+    <string name="ns_secret_hint">The site\'s API_SECRET, or an access token allowed to upload</string>
+    <string name="ns_first_upload">The readings of the last 24 hours are sent right away, then every new one.</string>
+    <string name="ns_upload">Upload to Nightscout</string>
+    <string name="ns_upload_active">On: every new reading goes to Nightscout</string>
+    <string name="ns_disconnect">Disconnect Nightscout</string>
+    <string name="ns_disconnect_title">Disconnect Nightscout?</string>
+    <string name="ns_disconnect_text">The phone stops uploading to Nightscout and forgets the secret. What is already on the site stays there.</string>
+
     <!-- 70_diag_meter -->
 
     <!-- Diagnostics -->
@@ -473,8 +497,6 @@
     <string name="diag_saved_sensor">Saved sensor</string>
     <string name="diag_none">none</string>
     <string name="diag_certificate">Certificate</string>
-    <string name="diag_configured">configured</string>
-    <string name="diag_not_configured">not configured</string>
     <string name="diag_permissions">Bluetooth permissions</string>
     <string name="diag_granted">granted</string>
     <string name="diag_missing">missing</string>
@@ -525,6 +547,8 @@
     <string name="meter_none_7d">No measurements in the last 7 days</string>
     <string name="meter_forget_title">Forget the glucose meter?</string>
     <string name="meter_forget_text">The phone stops receiving its measurements. Those already received are kept.</string>
+    <string name="diag_cert_builtin">included in the app</string>
+    <string name="diag_cert_own">imported</string>
 
     <!-- 80_collector -->
 

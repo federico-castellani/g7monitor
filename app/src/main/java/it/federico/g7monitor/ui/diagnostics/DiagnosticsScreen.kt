@@ -136,7 +136,7 @@ fun DiagnosticsScreen(settings: AppSettings, status: SensorStatus, onBack: () ->
                     InfoLine(stringResource(R.string.diag_saved_sensor), settings.sensorMac ?: stringResource(R.string.diag_none))
                     InfoLine(
                         stringResource(R.string.diag_certificate),
-                        stringResource(if (settings.hasCertificates) R.string.diag_configured else R.string.diag_not_configured),
+                        stringResource(if (settings.hasCertificates) R.string.diag_cert_own else R.string.diag_cert_builtin),
                     )
                     InfoLine(stringResource(R.string.diag_permissions), stringResource(if (permitted) R.string.diag_granted else R.string.diag_missing), if (permitted) MaterialTheme.colorScheme.onSurface else error)
                     BluetoothAdapterInfo(context)

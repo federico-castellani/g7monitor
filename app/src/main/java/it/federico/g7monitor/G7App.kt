@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import it.federico.g7monitor.net.NightscoutUploader
 
 /** Manual dependency container: the app is small enough not to need a DI framework. */
 class G7App : Application() {
@@ -30,6 +31,8 @@ class G7App : Application() {
     lateinit var settings: SettingsRepository
         private set
     lateinit var uploader: Uploader
+        private set
+    lateinit var nightscout: NightscoutUploader
         private set
     lateinit var follower: Follower
         private set
@@ -58,6 +61,7 @@ class G7App : Application() {
         readings = ReadingStore(this)
         settings = SettingsRepository(this)
         uploader = Uploader(this)
+        nightscout = NightscoutUploader(this)
         follower = Follower(this)
         alarmSettings = AlarmRepository(this)
         alarms = AlarmEngine(this)
