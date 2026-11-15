@@ -169,6 +169,17 @@
     <string name="update_permission">Only the first time: Android must allow G7 Monitor to install updates. Turn the option on, come back here and tap Update again.</string>
     <string name="update_install">Update</string>
 
+    <!-- 12_forecast -->
+
+    <!-- Personal forecast -->
+    <string name="forecast_title">Forecast (AI)</string>
+    <string name="forecast_show">Show the forecast</string>
+    <string name="forecast_waiting">Starts with the next readings</string>
+    <string name="forecast_learning">Learning: %1$s of %2$d days of readings</string>
+    <string name="forecast_ready">Mean error at 30 minutes: ±%1$s (with the trend alone: ±%2$s)</string>
+    <string name="forecast_explain">A dashed line on the chart shows where glucose is likely heading in the next hour, with its likely range. The app learns it from your own readings of the last 30 days: the recent trend, the time of day and your typical day (meals, nights). It checks itself on the most recent days and learns again every few hours. Everything stays on the phone. It is an estimate: never use it for treatment decisions.</string>
+    <string name="forecast_in_30">in 30 min ≈ %1$s</string>
+
     <!-- 20_home -->
 
     <!-- Home -->

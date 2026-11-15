@@ -45,6 +45,7 @@ import java.net.UnknownHostException
 import javax.net.ssl.SSLException
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
+import it.federico.g7monitor.predict.GlucoseModel
 
 /** Names of common Bluetooth meters (used when the advertisement does not list the Glucose service). */
 private val METER_NAMES = Regex("contour|accu-?chek|meter|onetouch|verio|caresens|gluco|true ?metrix|beurer|wellion|glucomen", RegexOption.IGNORE_CASE)
@@ -70,6 +71,8 @@ data class HomeState(
     val now: Long = System.currentTimeMillis(),
     /** false until the settings have been read: avoids flashing the welcome screen. */
     val ready: Boolean = false,
+    /** Personal forecast for the next hour after the newest reading; empty while the model is learning. */
+    val forecast: List<GlucoseModel.Point> = emptyList(),
 ) {
     val latest get() = readings.lastOrNull()
     val previous get() = readings.getOrNull(readings.size - 2)
@@ -104,11 +107,11 @@ class MainViewModel : ViewModel() {
     private val readings = combine(window, app.readings.changes) { w, _ -> w }
         .mapLatest { w ->
             val from = System.currentTimeMillis() - w.hours * 3_600_000L
-            app.readings.since(from) to app.readings.fingersticksSince(from)
+            Triple(app.readings.since(from), app.readings.fingersticksSince(from), app.predictor.forecast())
         }
 
     val state: StateFlow<HomeState> = combine(app.settings.settings, app.status, window, readings, clock) { s, st, w, r, now ->
-        HomeState(s, st, w, r.first, r.second, now, ready = true)
+        HomeState(s, st, w, r.first, r.second, now, ready = true, forecast = r.third)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
 
     init {

@@ -93,6 +93,7 @@ import it.federico.g7monitor.ui.theme.LocalRangeColors
 import androidx.compose.ui.res.stringResource
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
+import androidx.compose.material.icons.outlined.AutoAwesome
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,6 +172,7 @@ fun HomeScreen(
                     smoothing = s.chartSmoothing,
                     showDots = s.chartDots,
                     showFingersticks = s.chartFingersticks,
+                    forecast = if (s.chartForecast && !state.isStale) state.forecast else emptyList(),
                 )
                 state.fingersticks.lastOrNull()?.let { f ->
                     val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(f.timestamp)) }
@@ -408,6 +410,19 @@ private fun CurrentGlucoseCard(state: HomeState) {
                 if (trend != null && !state.isStale) {
                     Text(trend.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                // On a line of its own: next to the other two it does not fit on a phone.
+                state.forecast.firstOrNull { it.time - latest.timestamp == 30 * 60_000L }
+                    ?.takeIf { s.chartForecast && !state.isStale }
+                    ?.let {
+                        StatusPill(
+                            Icons.Outlined.AutoAwesome,
+                            stringResource(
+                                R.string.forecast_in_30,
+                                "${Glucose.format(Math.round(it.mgdl).toInt(), s.useMmol)} ${Glucose.unit(s.useMmol)}",
+                            ),
+                            MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
             }
         }
     }

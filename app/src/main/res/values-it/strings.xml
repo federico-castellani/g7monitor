@@ -168,6 +168,17 @@
     <string name="update_permission">Solo la prima volta: Android deve consentire a G7 Monitor di installare aggiornamenti. Attiva l\'opzione, torna qui e tocca di nuovo Aggiorna.</string>
     <string name="update_install">Aggiorna</string>
 
+    <!-- 12_forecast -->
+
+    <!-- Personal forecast -->
+    <string name="forecast_title">Previsione (IA)</string>
+    <string name="forecast_show">Mostra la previsione</string>
+    <string name="forecast_waiting">Parte con le prossime letture</string>
+    <string name="forecast_learning">Sta imparando: %1$s di %2$d giorni di letture</string>
+    <string name="forecast_ready">Errore medio a 30 minuti: ±%1$s (con la sola tendenza: ±%2$s)</string>
+    <string name="forecast_explain">Una linea tratteggiata sul grafico mostra dove probabilmente andrà la glicemia nella prossima ora, con la fascia probabile. L\'app la impara dalle tue letture degli ultimi 30 giorni: la tendenza recente, l\'ora del giorno e la tua giornata tipo (pasti, notti). Si verifica sugli ultimi giorni e reimpara ogni qualche ora. Tutto resta sul telefono. È una stima: non usarla mai per decisioni terapeutiche.</string>
+    <string name="forecast_in_30">tra 30 min ≈ %1$s</string>
+
     <!-- 20_home -->
 
     <!-- Home -->

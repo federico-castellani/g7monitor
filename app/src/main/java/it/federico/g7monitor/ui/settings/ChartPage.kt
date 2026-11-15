@@ -33,6 +33,10 @@ import it.federico.g7monitor.ui.home.GlucoseChart
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import it.federico.g7monitor.R
+import androidx.compose.material.icons.outlined.AutoAwesome
+import it.federico.g7monitor.predict.GlucoseModel
+import it.federico.g7monitor.ui.Glucose
+import java.util.Locale
 
 /** Smoothing levels, in the order of the buttons: label and what it does. */
 private val SMOOTHING = listOf(
@@ -88,6 +92,8 @@ fun ChartSections(settings: AppSettings) {
         )
     }
 
+    ForecastSection(settings)
+
     SectionCard(stringResource(R.string.chart_show), Icons.Outlined.Tune) {
         SettingRow(
             Icons.Outlined.Circle, stringResource(R.string.chart_dots),
@@ -103,6 +109,40 @@ fun ChartSections(settings: AppSettings) {
         )
         Text(
             stringResource(R.string.chart_window_note),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The personal forecast: on/off, how far it has learned, and how accurate it turned out. */
+@Composable
+private fun ForecastSection(settings: AppSettings) {
+    val app = G7App.instance
+    val scope = rememberCoroutineScope()
+    val result by app.predictor.result.collectAsState()
+    LaunchedEffect(Unit) { app.predictor.forecast() } // learns now if it never did
+    val mmol = settings.useMmol
+    val unit = Glucose.unit(mmol)
+    SectionCard(stringResource(R.string.forecast_title), Icons.Outlined.AutoAwesome) {
+        val status = when (val r = result) {
+            null -> stringResource(R.string.forecast_waiting)
+            is GlucoseModel.Result.Learning -> stringResource(
+                R.string.forecast_learning, String.format(Locale.getDefault(), "%.1f", r.days), GlucoseModel.MIN_DAYS.toInt(),
+            )
+            is GlucoseModel.Result.Ready -> r.model.accuracy30?.let {
+                stringResource(
+                    R.string.forecast_ready,
+                    "${Glucose.format(Math.round(it.modelMae).toInt(), mmol)} $unit",
+                    "${Glucose.format(Math.round(it.trendMae).toInt(), mmol)} $unit",
+                )
+            } ?: stringResource(R.string.forecast_waiting)
+        }
+        SettingRow(
+            Icons.Outlined.AutoAwesome, stringResource(R.string.forecast_show), status,
+            trailing = { Switch(checked = settings.chartForecast, onCheckedChange = { v -> scope.launch { app.settings.setChartForecast(v) } }) },
+        )
+        Text(
+            stringResource(R.string.forecast_explain),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

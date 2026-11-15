@@ -40,6 +40,8 @@ data class AppSettings(
     val chartHours: Int = 6,
     /** The current glucose drawn as the notification's status bar icon, instead of the app icon. */
     val statusBarNumber: Boolean = false,
+    /** The personal forecast (dashed line) on the home chart. */
+    val chartForecast: Boolean = true,
     val collectorEnabled: Boolean = false,
     val sensorMac: String? = null,
     val sessionStart: Long? = null,
@@ -91,6 +93,7 @@ class SettingsRepository(private val context: Context) {
         val chartMeter = booleanPreferencesKey("chart_fingersticks")
         val chartHours = intPreferencesKey("chart_hours")
         val statusNumber = booleanPreferencesKey("status_bar_number")
+        val forecast = booleanPreferencesKey("chart_forecast")
         val low = intPreferencesKey("low")
         val high = intPreferencesKey("high")
         val enabled = booleanPreferencesKey("collector_enabled")
@@ -143,6 +146,7 @@ class SettingsRepository(private val context: Context) {
         chartFingersticks = this[K.chartMeter] ?: true,
         chartHours = this[K.chartHours] ?: 6,
         statusBarNumber = this[K.statusNumber] ?: false,
+        chartForecast = this[K.forecast] ?: true,
         collectorEnabled = this[K.enabled] ?: false,
         sensorMac = this[K.mac],
         sessionStart = this[K.session],
@@ -230,6 +234,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setChartFingersticks(v: Boolean) = context.dataStore.edit { it[K.chartMeter] = v }
     suspend fun setChartHours(hours: Int) = context.dataStore.edit { it[K.chartHours] = hours }
     suspend fun setStatusBarNumber(v: Boolean) = context.dataStore.edit { it[K.statusNumber] = v }
+    suspend fun setChartForecast(v: Boolean) = context.dataStore.edit { it[K.forecast] = v }
     suspend fun setRange(low: Int, high: Int) = context.dataStore.edit { it[K.low] = low; it[K.high] = high }
     suspend fun setCollectorEnabled(v: Boolean) = context.dataStore.edit { it[K.enabled] = v }
     suspend fun setSensorMac(mac: String?) = context.dataStore.edit { if (mac == null) it.remove(K.mac) else it[K.mac] = mac }

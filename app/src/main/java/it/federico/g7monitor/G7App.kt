@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import it.federico.g7monitor.net.NightscoutUploader
+import it.federico.g7monitor.predict.Predictor
 
 /** Manual dependency container: the app is small enough not to need a DI framework. */
 class G7App : Application() {
@@ -42,6 +43,8 @@ class G7App : Application() {
         private set
     lateinit var watch: WatchSync
         private set
+    /** Personal glucose forecast, learned from the stored readings. */
+    val predictor by lazy { Predictor(this) }
     lateinit var updater: AppUpdater
         private set
 

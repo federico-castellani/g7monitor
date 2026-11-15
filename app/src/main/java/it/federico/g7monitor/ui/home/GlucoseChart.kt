@@ -39,6 +39,7 @@ import java.util.Locale
 import kotlin.math.abs
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
+import it.federico.g7monitor.predict.GlucoseModel
 
 /**
  * Glucose chart drawn directly on a Canvas: target band, gridlines, points coloured
@@ -61,6 +62,8 @@ fun GlucoseChart(
     showDots: Boolean = true,
     showFingersticks: Boolean = true,
     height: Dp = 260.dp,
+    /** Personal forecast after the newest reading: a dashed line with its 80% band. */
+    forecast: List<GlucoseModel.Point> = emptyList(),
 ) {
     val range = LocalRangeColors.current
     val scheme = MaterialTheme.colorScheme
@@ -95,7 +98,8 @@ fun GlucoseChart(
         val plotH = size.height - bottomPad - topPad
 
         val start = now - windowHours * 3_600_000L
-        val end = now + windowHours * 3_600_000L / 30 // small breathing room on the right
+        // Small breathing room on the right, or the forecast hour.
+        val end = maxOf(now + windowHours * 3_600_000L / 30, forecast.maxOfOrNull { it.time + 5 * 60_000L } ?: 0L)
         val maxData = readings.maxOfOrNull { it.mgdl } ?: 0
         val minData = readings.minOfOrNull { it.mgdl } ?: 400
         val yMax = maxOf(250, ((maxData + 25) / 50 + 1) * 50).coerceAtMost(400).toFloat()
@@ -206,6 +210,28 @@ fun GlucoseChart(
             val ty0 = (cy - half - 4.dp.toPx() - th).let { if (it < 0f) cy + half + 4.dp.toPx() else it }
             drawRoundRect(range.meter, Offset(tx0, ty0), Size(tw, th), CornerRadius(th / 2))
             drawText(m, topLeft = Offset(tx0 + padX, ty0 + padY))
+        }
+
+        // Forecast: band, then a dashed line from the newest reading
+        val anchor = readings.lastOrNull()
+        if (forecast.isNotEmpty() && anchor != null) {
+            val ax = x(anchor.timestamp); val ay = y(anchor.mgdl.toFloat().coerceIn(yMin, yMax))
+            val band = Path().apply {
+                moveTo(ax, ay)
+                for (p in forecast) lineTo(x(p.time), y(p.high.toFloat().coerceIn(yMin, yMax)))
+                for (p in forecast.asReversed()) lineTo(x(p.time), y(p.low.toFloat().coerceIn(yMin, yMax)))
+                close()
+            }
+            drawPath(band, scheme.tertiary.copy(alpha = 0.14f))
+            val line = Path().apply {
+                moveTo(ax, ay)
+                for (p in forecast) lineTo(x(p.time), y(p.mgdl.toFloat().coerceIn(yMin, yMax)))
+            }
+            drawPath(
+                line, scheme.tertiary.copy(alpha = 0.85f),
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))),
+            )
         }
 
         // "Now" marker
