@@ -117,7 +117,7 @@ Battery: the watch never asks for data (the phone sends each reading), the watch
 
 ### Alarms on the watch
 
-When an alarm rings on the phone, the watch shows a full-screen page with the alarm and the value, and vibrates. **Snooze** on the watch silences the alarm on the phone too. The page closes by itself when the alarm stops on the phone.
+When an alarm rings on the phone, the watch turns its screen on and shows a full-screen page with the alarm and the value, vibrating like an alarm clock for about a minute. **Snooze** on the watch silences the alarm on the phone too, and stops the vibration. The page closes by itself when the alarm stops on the phone. Galaxy Watches do not alert while they are not worn, so test it with the watch on your wrist.
 
 ### Installing on the watch
 

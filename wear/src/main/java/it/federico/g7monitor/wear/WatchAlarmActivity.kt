@@ -1,12 +1,8 @@
 package it.federico.g7monitor.wear
 
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,16 +33,14 @@ import androidx.wear.compose.material.Text
 import kotlinx.coroutines.launch
 
 /**
- * Full-screen alarm on the watch, like the phone's: on top of the watch face (also with the screen
- * off), vibrating until "Posticipa", for at most [VIBRATE_MS]. It closes by itself when the alarm
- * stops on the phone (snoozed there, or the glucose is back in range).
+ * Full-screen alarm page on the watch, like the phone's: large value and "Posticipa", vibrating like
+ * an alarm clock for about a minute. Opened as the notification's full-screen page (see
+ * [WatchAlarm]) or by tapping the notification; it closes by itself when the alarm stops on the
+ * phone (snoozed there, or the glucose is back in range).
  */
 class WatchAlarmActivity : ComponentActivity() {
-    private val vibrator by lazy {
-        if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java).defaultVibrator
-        else @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
-    }
-    private val stopVibration = Runnable { vibrator.cancel() }
+    /** Closes an alarm the phone stopped repeating (see [WatchAlarm.EXPIRE_MS]). */
+    private val expire = Runnable { if (WatchAlarm.current.value?.since == vibratingFor) WatchAlarm.clear(this) }
     private val handler = Handler(Looper.getMainLooper())
     private var vibratingFor: Long? = null
 
@@ -60,7 +54,9 @@ class WatchAlarmActivity : ComponentActivity() {
                 } else if (alarm.since != vibratingFor) {
                     // A new alarm, or the same one again at the next reading: vibrate again.
                     vibratingFor = alarm.since
-                    vibrate()
+                    WatchAlarm.vibrate(this@WatchAlarmActivity)
+                    handler.removeCallbacks(expire)
+                    handler.postDelayed(expire, WatchAlarm.EXPIRE_MS)
                 }
             }
         }
@@ -72,21 +68,27 @@ class WatchAlarmActivity : ComponentActivity() {
         }
     }
 
-    private fun vibrate() {
-        handler.removeCallbacks(stopVibration)
-        vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 400), 0))
-        handler.postDelayed(stopVibration, VIBRATE_MS)
+    override fun onStart() {
+        super.onStart()
+        visible = true
+    }
+
+    override fun onStop() {
+        visible = false
+        super.onStop()
     }
 
     override fun onDestroy() {
-        handler.removeCallbacks(stopVibration)
-        vibrator.cancel()
+        handler.removeCallbacks(expire)
+        WatchAlarm.stopVibration(this)
         super.onDestroy()
     }
 
-    private companion object {
-        /** As long as the phone rings. */
-        const val VIBRATE_MS = 2 * 60_000L
+    companion object {
+        /** The page is on screen: a repeated alarm updates it instead of posting a new notification. */
+        @Volatile
+        var visible = false
+            private set
     }
 }
 
