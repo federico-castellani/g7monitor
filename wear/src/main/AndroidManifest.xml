@@ -69,6 +69,15 @@
             android:name=".WatchUpdateReceiver"
             android:exported="false" />
 
+        <!-- after an update (also one installed by the app itself): tell the phone the new version -->
+        <receiver
+            android:name=".PackageReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".AlarmSnoozeReceiver"
             android:exported="false" />

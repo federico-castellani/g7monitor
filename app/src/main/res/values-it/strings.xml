@@ -167,6 +167,7 @@
     <string name="update_installing">Conferma l\'installazione nella finestra di Android. L\'app si riavvia da sola.</string>
     <string name="update_permission">Solo la prima volta: Android deve consentire a G7 Monitor di installare aggiornamenti. Attiva l\'opzione, torna qui e tocca di nuovo Aggiorna.</string>
     <string name="update_install">Aggiorna</string>
+    <string name="watch_already_current">L\'orologio è già aggiornato</string>
 
     <!-- 12_forecast -->
 

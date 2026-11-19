@@ -168,6 +168,7 @@
     <string name="update_installing">Confirm the installation in the Android window. The app restarts by itself.</string>
     <string name="update_permission">Only the first time: Android must allow G7 Monitor to install updates. Turn the option on, come back here and tap Update again.</string>
     <string name="update_install">Update</string>
+    <string name="watch_already_current">The watch is already up to date</string>
 
     <!-- 12_forecast -->
 

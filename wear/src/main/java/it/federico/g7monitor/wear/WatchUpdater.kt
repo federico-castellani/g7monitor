@@ -41,7 +41,13 @@ object WatchUpdater {
     private const val LATEST = "https://api.github.com/repos/federico-castellani/g7monitor/releases/latest"
     private val APK = Regex("""G7Monitor-Wear-\d+\.\d+\.\d+\.apk""")
     private const val CHECK_EVERY_MS = 6 * 3_600_000L
-    private const val CHANNEL = "updates"
+    /** With a short vibration: Samsung's interface shows no pop-up for a silent notification. */
+    private const val CHANNEL = "app_updates"
+    private const val OLD_CHANNEL = "updates"
+    private const val PREFS = "updates"
+    private const val KEY_LAST_CHECK = "last_check"
+    /** The phone's version, as it last said: when it is newer than this app, a check is due. */
+    private const val KEY_PHONE_VERSION = "phone_version"
     private const val NOTIFICATION_ID = 41
     const val EXTRA_UPDATE = "it.federico.g7monitor.wear.UPDATE"
 
@@ -55,16 +61,20 @@ object WatchUpdater {
         ?.map { it.toIntOrNull() ?: return null }
         ?.let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
 
-    /** [force]: always ask GitHub (opened from the notification); otherwise at most every few hours. */
+    /**
+     * [force]: always ask GitHub (opened from the notification). Otherwise at most every few hours,
+     * except when the phone already runs a newer version: then the release is out, ask now.
+     */
     suspend fun check(context: Context, force: Boolean) {
         val s = _state.value
         if (s is State.Checking || s is State.Downloading || s is State.Installing) return
-        val prefs = context.getSharedPreferences("updates", Context.MODE_PRIVATE)
-        if (!force && System.currentTimeMillis() - prefs.getLong("last_check", 0) < CHECK_EVERY_MS) return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val phoneNewer = (prefs.getString(KEY_PHONE_VERSION, null)?.let(::versionCode) ?: 0) > installedCode(context)
+        if (!force && !phoneNewer && System.currentTimeMillis() - prefs.getLong(KEY_LAST_CHECK, 0) < CHECK_EVERY_MS) return
         _state.value = State.Checking
         _state.value = try {
             val r = withContext(Dispatchers.IO) { latest() }
-            prefs.edit().putLong("last_check", System.currentTimeMillis()).apply()
+            prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
             if (r != null && r.code > installedCode(context)) State.Available(r) else State.UpToDate
         } catch (e: Exception) {
             Log.w(TAG, "check: $e")
@@ -146,9 +156,16 @@ object WatchUpdater {
     /** The phone has a newer version: a notification on the watch, tapping it opens the update. */
     fun notifyPhoneVersion(context: Context, phoneVersion: String) {
         val code = versionCode(phoneVersion) ?: return
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_PHONE_VERSION, phoneVersion).apply()
         if (code <= installedCode(context)) return
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.w_channel_updates), NotificationManager.IMPORTANCE_DEFAULT))
+        nm.deleteNotificationChannel(OLD_CHANNEL)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL, context.getString(R.string.w_channel_updates), NotificationManager.IMPORTANCE_HIGH).apply {
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 300)
+            }
+        )
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java).putExtra(EXTRA_UPDATE, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -194,4 +211,14 @@ object WatchUpdater {
 /** Result of the system installer for [WatchUpdater.install]. */
 class WatchUpdateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) = WatchUpdater.onResult(context, intent)
+}
+
+/**
+ * The app was updated (by itself, from the notification, or with the install script): tells the
+ * phone at once, or its "Orologio" page would keep offering an update already installed.
+ */
+class PackageReplacedReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) DataLayerListenerService.publishVersion(context)
+    }
 }

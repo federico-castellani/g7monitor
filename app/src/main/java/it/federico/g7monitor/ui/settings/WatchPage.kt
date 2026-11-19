@@ -30,6 +30,7 @@ import it.federico.g7monitor.ui.components.SettingRow
 import it.federico.g7monitor.ui.theme.LocalRangeColors
 import it.federico.g7monitor.update.AppUpdater
 import it.federico.g7monitor.watch.WatchSync
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import it.federico.g7monitor.R
@@ -81,7 +82,14 @@ fun WatchSections() {
             FilledTonalButton(onClick = {
                 scope.launch {
                     sync.announceVersion(force = true)
-                    Toast.makeText(context, R.string.watch_update_sent, Toast.LENGTH_LONG).show()
+                    // The watch answers with its version: one that updated itself may already be current.
+                    delay(3_000)
+                    val fresh = sync.watches()
+                    watches = fresh
+                    val stillOld = fresh.any { it.appVersion != null && code(it.appVersion) < code(phone) }
+                    Toast.makeText(
+                        context, if (stillOld) R.string.watch_update_sent else R.string.watch_already_current, Toast.LENGTH_LONG,
+                    ).show()
                 }
             }) { Text(stringResource(R.string.watch_update)) }
         }
