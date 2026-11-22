@@ -60,6 +60,7 @@ class Uploader(private val app: G7App) {
                 if (batch.size < BATCH) break
             }
             sent += uploadFingersticks(s.serverUrl, s.serverToken)
+            uploadSensorStarts(s.serverUrl, s.serverToken)
             failures = 0
             retryAt = 0
             if (sent > 0 || force || s.uploadError != null) app.settings.setUploadResult(now, null)
@@ -102,6 +103,19 @@ class Uploader(private val app: G7App) {
             sent += batch.size
             if (batch.size < 500) return sent
         }
+    }
+
+    /** New sensors, for the followers' charts; a server too old to know them simply skips them. */
+    private suspend fun uploadSensorStarts(url: String, token: String) {
+        val starts = app.readings.pendingSensorStarts()
+        if (starts.isEmpty() || oldServerLogged) return
+        try {
+            ServerApi.uploadSensorStarts(url, token, starts)
+        } catch (e: ServerApi.HttpError) {
+            if (e.status != 404) throw e
+            return
+        }
+        app.readings.markSensorStartsUploaded(starts)
     }
 
     /** After a refused batch: sends each result alone, and drops the ones the server refuses. */

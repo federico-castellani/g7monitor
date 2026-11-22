@@ -372,6 +372,13 @@
     <string name="channel_alarms_text">Low or high glucose, rapid changes, signal loss</string>
     <string name="meter_stopped">Stopped</string>
 
+    <!-- 45_sensor_changes -->
+
+    <!-- Sensor changes -->
+    <string name="chart_new_sensor">New sensor</string>
+    <string name="follow_status_live">From the server · live</string>
+    <string name="follow_status_updated">From the server · updated at %1$s</string>
+
     <!-- 50_main -->
 
     <!-- Main activity -->

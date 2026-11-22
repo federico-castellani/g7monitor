@@ -64,6 +64,8 @@ fun GlucoseChart(
     height: Dp = 260.dp,
     /** Personal forecast after the newest reading: a dashed line with its 80% band. */
     forecast: List<GlucoseModel.Point> = emptyList(),
+    /** Sensor changes: a dashed line across the chart, labelled at the top. */
+    sensorStarts: List<Long> = emptyList(),
 ) {
     val range = LocalRangeColors.current
     val scheme = MaterialTheme.colorScheme
@@ -232,6 +234,20 @@ fun GlucoseChart(
                 style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round,
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))),
             )
+        }
+
+        // Sensor changes
+        val sensorColor = scheme.secondary
+        val sensorLabel = measurer.measure(str(R.string.chart_new_sensor), TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = sensorColor))
+        for (s in sensorStarts) {
+            if (s < start || s > end) continue
+            val sx = x(s)
+            drawLine(
+                sensorColor.copy(alpha = 0.8f), Offset(sx, topPad), Offset(sx, topPad + plotH), 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)),
+            )
+            val lx = (sx + 4.dp.toPx()).coerceAtMost(size.width - sensorLabel.size.width - 2.dp.toPx())
+            drawText(sensorLabel, topLeft = Offset(lx, topPad + 2.dp.toPx()))
         }
 
         // "Now" marker

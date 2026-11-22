@@ -35,7 +35,7 @@ data class Fingerstick(
  * no annotation processing needed. Readings within ±2 minutes are de-duplicated.
  */
 class ReadingStore(context: Context) :
-    SQLiteOpenHelper(context, "readings.db", null, 4) {
+    SQLiteOpenHelper(context, "readings.db", null, 5) {
 
     private val _changes = MutableStateFlow(0L)
 
@@ -50,6 +50,15 @@ class ReadingStore(context: Context) :
         db.execSQL(PENDING_INDEX)
         createFingersticks(db)
         addNightscout(db)
+        createSensors(db)
+    }
+
+    /** When each sensor was started: marks on the chart, sent to the server and to Nightscout. */
+    private fun createSensors(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE sensors (start INTEGER PRIMARY KEY, uploaded INTEGER NOT NULL DEFAULT 0, " +
+                "ns_uploaded INTEGER NOT NULL DEFAULT 0)"
+        )
     }
 
     private fun addNightscout(db: SQLiteDatabase) {
@@ -74,6 +83,7 @@ class ReadingStore(context: Context) :
         }
         if (oldVersion < 3) createFingersticks(db)
         if (oldVersion < 4) addNightscout(db)
+        if (oldVersion < 5) createSensors(db)
     }
 
     init {
@@ -159,12 +169,76 @@ class ReadingStore(context: Context) :
         val cutoff = arrayOf<Any>(from)
         writableDatabase.execSQL("UPDATE readings SET ns_uploaded = CASE WHEN ts < ? THEN 1 ELSE 0 END", cutoff)
         writableDatabase.execSQL("UPDATE fingersticks SET ns_uploaded = CASE WHEN ts < ? THEN 1 ELSE 0 END", cutoff)
+        writableDatabase.execSQL("UPDATE sensors SET ns_uploaded = CASE WHEN start < ? THEN 1 ELSE 0 END", cutoff)
     }
 
     /** New server or account: everything stored locally is sent again (the server ignores duplicates). */
     suspend fun markAllPending() = withContext(Dispatchers.IO) {
         writableDatabase.execSQL("UPDATE readings SET uploaded = 0 WHERE uploaded != 0")
         writableDatabase.execSQL("UPDATE fingersticks SET uploaded = 0 WHERE uploaded != 0")
+        writableDatabase.execSQL("UPDATE sensors SET uploaded = 0 WHERE uploaded != 0")
+    }
+
+    /**
+     * Sensor starts; one within [SENSOR_WINDOW_MS] of a stored start is the same sensor (the start
+     * is worked out again at every reading, a few seconds apart). @return how many were new.
+     */
+    suspend fun addSensorStarts(starts: List<Long>, fromServer: Boolean = false): Int = withContext(Dispatchers.IO) {
+        if (starts.isEmpty()) return@withContext 0
+        val db = writableDatabase
+        var added = 0
+        db.beginTransaction()
+        try {
+            val dup = db.compileStatement("SELECT COUNT(*) FROM sensors WHERE start BETWEEN ? AND ?")
+            for (s in starts) {
+                dup.bindLong(1, s - SENSOR_WINDOW_MS)
+                dup.bindLong(2, s + SENSOR_WINDOW_MS)
+                if (dup.simpleQueryForLong() > 0) continue
+                val values = ContentValues(3).apply {
+                    put("start", s)
+                    put("uploaded", if (fromServer) 1 else 0)
+                    put("ns_uploaded", if (fromServer) 1 else 0)
+                }
+                if (db.insert("sensors", null, values) != -1L) added++
+            }
+            dup.close()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        if (added > 0) _changes.value = _changes.value + 1
+        added
+    }
+
+    /** Sensor starts after [from], oldest first. */
+    suspend fun sensorStartsSince(from: Long): List<Long> = longs("SELECT start FROM sensors WHERE start >= ? ORDER BY start", from)
+
+    /** Start of the sensor in use (the newest one known). */
+    suspend fun latestSensorStart(): Long? = longs("SELECT start FROM sensors WHERE start >= ? ORDER BY start DESC LIMIT 1", 0).firstOrNull()
+
+    suspend fun pendingSensorStarts(target: UploadTarget = UploadTarget.Server): List<Long> =
+        longs("SELECT start FROM sensors WHERE ${target.column} = 0 AND start >= ? ORDER BY start", 0)
+
+    suspend fun markSensorStartsUploaded(list: List<Long>, target: UploadTarget = UploadTarget.Server) = withContext(Dispatchers.IO) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val update = db.compileStatement("UPDATE sensors SET ${target.column} = 1 WHERE start = ?")
+            for (s in list) {
+                update.bindLong(1, s)
+                update.executeUpdateDelete()
+            }
+            update.close()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private suspend fun longs(sql: String, arg: Long): List<Long> = withContext(Dispatchers.IO) {
+        readableDatabase.rawQuery(sql, arrayOf(arg.toString())).use { c ->
+            buildList(c.count) { while (c.moveToNext()) add(c.getLong(0)) }
+        }
     }
 
     private suspend fun query(where: String, arg: Long): List<GlucoseReading> = withContext(Dispatchers.IO) {
@@ -263,6 +337,8 @@ class ReadingStore(context: Context) :
     companion object {
         private const val DEDUPE_MS = 2 * 60_000L
         private const val FINGERSTICK_DEDUPE_MS = 60_000L
+        /** Same rule as the server: starts closer than this are the same sensor. */
+        private const val SENSOR_WINDOW_MS = 12 * 3_600_000L
         private const val PENDING_INDEX = "CREATE INDEX readings_pending ON readings(ts) WHERE uploaded = 0"
     }
 }

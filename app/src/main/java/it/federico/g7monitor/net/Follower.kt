@@ -84,7 +84,7 @@ class Follower(private val app: G7App) {
     }
 
     private suspend fun stream(url: String, token: String, since: Long) = coroutineScope {
-        val conn = withContext(Dispatchers.IO) { ServerApi.openStream(url, token, since, fingerSince()) }
+        val conn = withContext(Dispatchers.IO) { ServerApi.openStream(url, token, since, fingerSince(), sensorSince()) }
         connection = conn
         // A blocking socket read ignores coroutine cancellation: closing the connection ends it.
         val closer = launch { try { awaitCancellation() } finally { conn.disconnect() } }
@@ -92,12 +92,13 @@ class Follower(private val app: G7App) {
             failures = 0
             lastActivity = System.currentTimeMillis()
             DebugLog.log(str(R.string.follow_live))
-            showStatus("Dal server · in tempo reale")
+            showStatus(str(R.string.follow_status_live))
             withContext(Dispatchers.IO) {
                 ServerApi.readStream(
                     conn,
                     onActivity = { lastActivity = System.currentTimeMillis() },
                     onFingersticks = { list -> receivedFingersticks(list) },
+                    onSensorStarts = { list -> app.readings.addSensorStarts(list, fromServer = true) },
                 ) { rows -> received(rows) }
             }
         } finally {
@@ -126,8 +127,9 @@ class Follower(private val app: G7App) {
             val s = app.settings.current()
             if (s.dataSource != DataSource.Server || !s.followConnected) return@withContext false
             try {
-                val fetched = ServerApi.fetchSince(s.followUrl, s.followToken, since(), fingerSince())
+                val fetched = ServerApi.fetchSince(s.followUrl, s.followToken, since(), fingerSince(), sensorSince())
                 receivedFingersticks(fetched.fingersticks)
+                app.readings.addSensorStarts(fetched.sensorStarts, fromServer = true)
                 received(fetched.readings, always = true)
                 failures = 0
                 true
@@ -167,6 +169,9 @@ class Follower(private val app: G7App) {
     private suspend fun fingerSince(): Long =
         maxOf(app.readings.newestFingerstick() ?: 0L, System.currentTimeMillis() - FIRST_SYNC_MS)
 
+    /** Sensor starts after the newest one here; the first time, the server's last weeks (it shows the age of the one in use). */
+    private suspend fun sensorSince(): Long = app.readings.latestSensorStart() ?: 0L
+
     private suspend fun receivedFingersticks(list: List<Fingerstick>) {
         val added = app.readings.insertFingersticks(list, fromServer = true)
         if (added > 0) DebugLog.log(str(R.string.follow_fingersticks, added))
@@ -178,7 +183,7 @@ class Follower(private val app: G7App) {
         val now = System.currentTimeMillis()
         app.settings.setFollowResult(now, null)
         if (added > 0) DebugLog.log(str(R.string.follow_readings, added))
-        showStatus("Dal server · aggiornato alle ${timeFmt.format(Date(now))}")
+        showStatus(str(R.string.follow_status_updated, timeFmt.format(Date(now))))
     }
 
     private suspend fun showStatus(message: String) {

@@ -371,6 +371,13 @@
     <string name="channel_alarms_text">Glicemia bassa o alta, variazioni rapide, mancanza di segnale</string>
     <string name="meter_stopped">Fermo</string>
 
+    <!-- 45_sensor_changes -->
+
+    <!-- Sensor changes -->
+    <string name="chart_new_sensor">Nuovo sensore</string>
+    <string name="follow_status_live">Dal server · in tempo reale</string>
+    <string name="follow_status_updated">Dal server · aggiornato alle %1$s</string>
+
     <!-- 50_main -->
 
     <!-- Main activity -->

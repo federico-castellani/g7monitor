@@ -41,12 +41,13 @@ import kotlinx.coroutines.launch
 class WatchAlarmActivity : ComponentActivity() {
     /** Closes an alarm the phone stopped repeating (see [WatchAlarm.EXPIRE_MS]). */
     private val expire = Runnable { if (WatchAlarm.current.value?.since == vibratingFor) WatchAlarm.clear(this) }
+    /** The screen may sleep again once the alarm has had its minute: an ignored page must not keep it on for hours. */
+    private val allowScreenOff = Runnable { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     private val handler = Handler(Looper.getMainLooper())
     private var vibratingFor: Long? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         lifecycleScope.launch {
             WatchAlarm.current.collect { alarm ->
                 if (alarm == null) {
@@ -55,6 +56,9 @@ class WatchAlarmActivity : ComponentActivity() {
                     // A new alarm, or the same one again at the next reading: vibrate again.
                     vibratingFor = alarm.since
                     WatchAlarm.vibrate(this@WatchAlarmActivity)
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    handler.removeCallbacks(allowScreenOff)
+                    handler.postDelayed(allowScreenOff, SCREEN_ON_MS)
                     handler.removeCallbacks(expire)
                     handler.postDelayed(expire, WatchAlarm.EXPIRE_MS)
                 }
@@ -80,11 +84,15 @@ class WatchAlarmActivity : ComponentActivity() {
 
     override fun onDestroy() {
         handler.removeCallbacks(expire)
+        handler.removeCallbacks(allowScreenOff)
         WatchAlarm.stopVibration(this)
         super.onDestroy()
     }
 
     companion object {
+        /** As long as the vibration. */
+        private const val SCREEN_ON_MS = 60_000L
+
         /** The page is on screen: a repeated alarm updates it instead of posting a new notification. */
         @Volatile
         var visible = false

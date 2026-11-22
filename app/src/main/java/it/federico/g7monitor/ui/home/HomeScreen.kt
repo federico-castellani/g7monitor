@@ -147,6 +147,13 @@ fun HomeScreen(
             CurrentGlucoseCard(state)
             if (fromServer) {
                 if (s.followConnected) ServerCard(state, onOpenServer)
+                // The sensor's age, as the sensor phone sees it (start shared through the server).
+                sensorLife(state)?.let { life ->
+                    Card(
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    ) { Column(Modifier.fillMaxWidth().padding(18.dp)) { SensorLifeRow(life) } }
+                }
             } else {
                 SensorCard(state, onOpenDiagnostics)
             }
@@ -173,6 +180,7 @@ fun HomeScreen(
                     showDots = s.chartDots,
                     showFingersticks = s.chartFingersticks,
                     forecast = if (s.chartForecast && !state.isStale) state.forecast else emptyList(),
+                    sensorStarts = state.sensorStarts,
                 )
                 state.fingersticks.lastOrNull()?.let { f ->
                     val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(f.timestamp)) }
@@ -487,25 +495,30 @@ private fun SensorCard(state: HomeState, onClick: () -> Unit) {
                 }
                 Icon(Icons.Outlined.ChevronRight, contentDescription = stringResource(R.string.home_diagnostics), tint = scheme.onSurfaceVariant)
             }
-            if (life != null) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconBadge(
-                        if (life.warmingUp) Icons.Outlined.Timer else Icons.Outlined.Sensors,
-                        tint = scheme.onSurfaceVariant, container = scheme.surfaceContainerHighest, size = 32.dp,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(life.title, style = MaterialTheme.typography.bodyMedium)
-                        LinearProgressIndicator(
-                            progress = { life.progress },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = if (life.progress > 0.9f) LocalRangeColors.current.high else scheme.primary,
-                            trackColor = scheme.surfaceContainerHighest,
-                        )
-                        Text(life.subtitle, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
-                    }
-                }
-            }
+            if (life != null) SensorLifeRow(life)
+        }
+    }
+}
+
+/** Sensor day, time left and warm-up. */
+@Composable
+private fun SensorLifeRow(life: SensorLife) {
+    val scheme = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconBadge(
+            if (life.warmingUp) Icons.Outlined.Timer else Icons.Outlined.Sensors,
+            tint = scheme.onSurfaceVariant, container = scheme.surfaceContainerHighest, size = 32.dp,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(life.title, style = MaterialTheme.typography.bodyMedium)
+            LinearProgressIndicator(
+                progress = { life.progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = if (life.progress > 0.9f) LocalRangeColors.current.high else scheme.primary,
+                trackColor = scheme.surfaceContainerHighest,
+            )
+            Text(life.subtitle, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
         }
     }
 }
@@ -513,7 +526,9 @@ private fun SensorCard(state: HomeState, onClick: () -> Unit) {
 private class SensorLife(val title: String, val subtitle: String, val progress: Float, val warmingUp: Boolean)
 
 private fun sensorLife(state: HomeState): SensorLife? {
-    val start = state.settings.sessionStart ?: return null
+    // The sensor phone knows it from the sensor itself; a follower from the server.
+    val start = (if (state.settings.dataSource == DataSource.Server) state.sensorStart else state.settings.sessionStart ?: state.sensorStart)
+        ?: return null
     val ageMin = (state.now - start) / 60_000L
     val st = state.status.sensorState
     if (st == SensorState.WarmingUp || ageMin < 30) {

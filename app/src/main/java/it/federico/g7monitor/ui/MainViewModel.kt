@@ -73,6 +73,10 @@ data class HomeState(
     val ready: Boolean = false,
     /** Personal forecast for the next hour after the newest reading; empty while the model is learning. */
     val forecast: List<GlucoseModel.Point> = emptyList(),
+    /** Sensor changes in the chart window. */
+    val sensorStarts: List<Long> = emptyList(),
+    /** Start of the sensor in use, as recorded (a follower gets it from the server). */
+    val sensorStart: Long? = null,
 ) {
     val latest get() = readings.lastOrNull()
     val previous get() = readings.getOrNull(readings.size - 2)
@@ -95,6 +99,15 @@ data class HomeState(
     }
 }
 
+/** What the home chart shows, read together from the store. */
+private class ChartData(
+    val readings: List<GlucoseReading>,
+    val fingersticks: List<Fingerstick>,
+    val forecast: List<GlucoseModel.Point>,
+    val sensorStarts: List<Long>,
+    val sensorStart: Long?,
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel : ViewModel() {
     private val app = G7App.instance
@@ -107,11 +120,14 @@ class MainViewModel : ViewModel() {
     private val readings = combine(window, app.readings.changes) { w, _ -> w }
         .mapLatest { w ->
             val from = System.currentTimeMillis() - w.hours * 3_600_000L
-            Triple(app.readings.since(from), app.readings.fingersticksSince(from), app.predictor.forecast())
+            ChartData(
+                app.readings.since(from), app.readings.fingersticksSince(from), app.predictor.forecast(),
+                app.readings.sensorStartsSince(from), app.readings.latestSensorStart(),
+            )
         }
 
     val state: StateFlow<HomeState> = combine(app.settings.settings, app.status, window, readings, clock) { s, st, w, r, now ->
-        HomeState(s, st, w, r.first, r.second, now, ready = true, forecast = r.third)
+        HomeState(s, st, w, r.readings, r.fingersticks, now, ready = true, r.forecast, r.sensorStarts, r.sensorStart)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
 
     init {
@@ -271,8 +287,9 @@ class MainViewModel : ViewModel() {
      */
     private suspend fun restoreFromServer(url: String, token: String) {
         val since = System.currentTimeMillis() - 24 * 3_600_000L
-        val fetched = withContext(Dispatchers.IO) { runCatching { ServerApi.fetchSince(url, token, since, since) }.getOrNull() } ?: return
+        val fetched = withContext(Dispatchers.IO) { runCatching { ServerApi.fetchSince(url, token, since, since, 0L) }.getOrNull() } ?: return
         app.readings.insertFingersticks(fetched.fingersticks, fromServer = true)
+        app.readings.addSensorStarts(fetched.sensorStarts, fromServer = true)
         val added = app.readings.insertAll(fetched.readings, fromServer = true)
         if (added > 0) DebugLog.log(str(R.string.upload_restored, added))
     }

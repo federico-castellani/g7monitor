@@ -50,6 +50,15 @@ object NightscoutApi {
         send("POST", "$base/api/v1/treatments", secret, treatments(list).toString())
     }
 
+    /** New sensors, as "Sensor Start" treatments (Nightscout shows the sensor age from them). */
+    fun uploadSensorStarts(base: String, secret: String, starts: List<Long>) {
+        send("POST", "$base/api/v1/treatments", secret, sensorStarts(starts).toString())
+    }
+
+    internal fun sensorStarts(starts: List<Long>): JSONArray = JSONArray().apply {
+        for (s in starts) put(JSONObject().put("eventType", "Sensor Start").put("created_at", iso(s)).put("enteredBy", DEVICE))
+    }
+
     internal fun entries(readings: List<GlucoseReading>): JSONArray = JSONArray().apply {
         for (r in readings) put(
             JSONObject()

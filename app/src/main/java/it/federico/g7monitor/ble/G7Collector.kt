@@ -499,7 +499,11 @@ class G7Collector(private val context: Context, private val scope: CoroutineScop
         flow.gotGlucose = true
         app.status.value = app.status.value.copy(sensorState = state, lastContact = now)
         val sessionStart = g.sessionStart(now)
-        if (state != SensorState.Stopped) app.settings.setSessionStart(sessionStart)
+        if (state != SensorState.Stopped) {
+            app.settings.setSessionStart(sessionStart)
+            // A new sensor: a mark on the chart, for the followers too (once per sensor, see addSensorStarts).
+            app.readings.addSensorStarts(listOf(sessionStart))
+        }
 
         val readingTime = g.readingTime(now)
         if (state.usable && g.glucoseMgdl in 39..401) {

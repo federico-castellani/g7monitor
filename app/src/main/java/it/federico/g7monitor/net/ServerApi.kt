@@ -67,13 +67,31 @@ object ServerApi {
      * Follower: readings newer than [sinceMs], oldest first. Asked once per expected reading,
      * so the answer is usually a single row (well under 1 KB with headers).
      */
-    data class Fetched(val readings: List<GlucoseReading>, val fingersticks: List<Fingerstick>)
+    data class Fetched(val readings: List<GlucoseReading>, val fingersticks: List<Fingerstick>, val sensorStarts: List<Long>)
 
-    /** Readings after [sinceMs] and meter results after [fingerSinceMs] (older servers send no meter results). */
-    fun fetchSince(base: String, token: String, sinceMs: Long, fingerSinceMs: Long): Fetched {
-        val json = JSONObject(send("GET", "$base/api/v1/readings?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}", token, null))
-        return Fetched(decode(json.getJSONArray("r")), json.optJSONArray("f")?.let(::decodeFingersticks) ?: emptyList())
+    /**
+     * Readings after [sinceMs], meter results after [fingerSinceMs] and sensor starts after
+     * [sensorSinceMs] (older servers send neither of the last two).
+     */
+    fun fetchSince(base: String, token: String, sinceMs: Long, fingerSinceMs: Long, sensorSinceMs: Long): Fetched {
+        val json = JSONObject(
+            send("GET", "$base/api/v1/readings?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}&ssince=${sensorSinceMs / 1000}", token, null)
+        )
+        return Fetched(
+            decode(json.getJSONArray("r")),
+            json.optJSONArray("f")?.let(::decodeFingersticks) ?: emptyList(),
+            json.optJSONArray("s")?.let(::decodeSensorStarts) ?: emptyList(),
+        )
     }
+
+    /** Sensor starts in unix seconds. @return how many the server did not have. */
+    fun uploadSensorStarts(base: String, token: String, starts: List<Long>): Int {
+        val rows = org.json.JSONArray()
+        for (s in starts) rows.put(s / 1000)
+        return JSONObject(post("$base/api/v1/sensors", token, JSONObject().put("s", rows).toString().toByteArray())).optInt("n")
+    }
+
+    internal fun decodeSensorStarts(rows: org.json.JSONArray): List<Long> = List(rows.length()) { rows.getLong(it) * 1000 }
 
     /** Meter results: [[unix seconds, mg/dL, meter | null], …]. @return how many the server did not have. */
     fun uploadFingersticks(base: String, token: String, list: List<Fingerstick>): Int {
@@ -94,8 +112,8 @@ object ServerApi {
      * Follower, live: opens the server's event stream (readings newer than [sinceMs] first, then each
      * new one as it is uploaded). Blocking. Close the returned connection to stop reading.
      */
-    fun openStream(base: String, token: String, sinceMs: Long, fingerSinceMs: Long): HttpURLConnection {
-        val url = "$base/api/v1/readings/stream?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}"
+    fun openStream(base: String, token: String, sinceMs: Long, fingerSinceMs: Long, sensorSinceMs: Long): HttpURLConnection {
+        val url = "$base/api/v1/readings/stream?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}&ssince=${sensorSinceMs / 1000}"
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = STREAM_READ_TIMEOUT_MS
@@ -121,6 +139,7 @@ object ServerApi {
         conn: HttpURLConnection,
         onActivity: () -> Unit,
         onFingersticks: suspend (List<Fingerstick>) -> Unit,
+        onSensorStarts: suspend (List<Long>) -> Unit,
         onRows: suspend (List<GlucoseReading>) -> Unit,
     ) {
         conn.inputStream.bufferedReader().use { reader ->
@@ -133,7 +152,11 @@ object ServerApi {
                     line.startsWith("event:") -> event = line.substring(6).trim()
                     line.startsWith("data:") -> {
                         val data = org.json.JSONArray(line.substring(5).trim())
-                        if (event == "fingerstick") onFingersticks(decodeFingersticks(data)) else if (event.isEmpty()) onRows(decode(data))
+                        when (event) {
+                            "fingerstick" -> onFingersticks(decodeFingersticks(data))
+                            "sensor" -> onSensorStarts(decodeSensorStarts(data))
+                            "" -> onRows(decode(data))
+                        }
                     }
                 }
             }

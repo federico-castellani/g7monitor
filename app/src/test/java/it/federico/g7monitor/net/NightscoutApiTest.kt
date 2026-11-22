@@ -43,6 +43,15 @@ class NightscoutApiTest {
     }
 
     @Test
+    fun `a new sensor is a sensor start treatment`() {
+        val t = 1_761_660_000_000L
+        val s = NightscoutApi.sensorStarts(listOf(t)).getJSONObject(0)
+        assertEquals("Sensor Start", s.getString("eventType"))
+        assertEquals("2025-10-28T14:00:00.000Z", s.getString("created_at"))
+        assertEquals("G7 Monitor", s.getString("enteredBy"))
+    }
+
+    @Test
     fun `meter results are bg check treatments`() {
         val t = 1_761_660_000_000L
         val f = NightscoutApi.treatments(listOf(Fingerstick(t, 98, "Contour"))).getJSONObject(0)
