@@ -46,6 +46,7 @@ import javax.net.ssl.SSLException
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
 import it.federico.g7monitor.predict.GlucoseModel
+import it.federico.g7monitor.data.ChartEvent
 
 /** Names of common Bluetooth meters (used when the advertisement does not list the Glucose service). */
 private val METER_NAMES = Regex("contour|accu-?chek|meter|onetouch|verio|caresens|gluco|true ?metrix|beurer|wellion|glucomen", RegexOption.IGNORE_CASE)
@@ -65,6 +66,7 @@ data class HomeState(
     val settings: AppSettings = AppSettings(),
     val status: SensorStatus = SensorStatus(),
     val window: ChartWindow = ChartWindow.H6,
+    /** Readings of the period the chart shows (the present, or the past while scrolled back). */
     val readings: List<GlucoseReading> = emptyList(),
     /** Blood glucose meter results in the chart window. */
     val fingersticks: List<Fingerstick> = emptyList(),
@@ -75,11 +77,23 @@ data class HomeState(
     val forecast: List<GlucoseModel.Point> = emptyList(),
     /** Sensor changes in the chart window. */
     val sensorStarts: List<Long> = emptyList(),
+    /** Notes (insulin, carbs, exercise, text) in the chart window. */
+    val events: List<ChartEvent> = emptyList(),
     /** Start of the sensor in use, as recorded (a follower gets it from the server). */
     val sensorStart: Long? = null,
+    /** The newest two readings, whatever period the chart shows: the current value and its change. */
+    val recent: List<GlucoseReading> = emptyList(),
+    /** End of the chart while looking at the past; null when it follows the present. */
+    val chartEnd: Long? = null,
+    /** Time of the oldest stored reading: the chart does not go further back. */
+    val oldest: Long? = null,
 ) {
-    val latest get() = readings.lastOrNull()
-    val previous get() = readings.getOrNull(readings.size - 2)
+    val latest get() = recent.lastOrNull()
+    val previous get() = recent.getOrNull(recent.size - 2)
+    val live get() = chartEnd == null
+    val chartTo get() = chartEnd ?: now
+    val chartFrom get() = chartTo - window.hours * 3_600_000L
+    val canGoBack get() = oldest != null && chartFrom > oldest
     val delta: Int?
         get() {
             val l = latest ?: return null
@@ -106,6 +120,10 @@ private class ChartData(
     val forecast: List<GlucoseModel.Point>,
     val sensorStarts: List<Long>,
     val sensorStart: Long?,
+    val recent: List<GlucoseReading>,
+    val end: Long?,
+    val oldest: Long?,
+    val events: List<ChartEvent>,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -117,18 +135,63 @@ class MainViewModel : ViewModel() {
     /** Ticks every 30 s so "x min ago" and the chart's time axis stay current. */
     private val clock = flow { while (true) { emit(System.currentTimeMillis()); delay(30_000) } }
 
-    private val readings = combine(window, app.readings.changes) { w, _ -> w }
-        .mapLatest { w ->
-            val from = System.currentTimeMillis() - w.hours * 3_600_000L
+    /** End of the chart while looking at the past; null follows the present. */
+    private val chartEnd = MutableStateFlow<Long?>(null)
+
+    private val readings = combine(window, app.readings.changes, chartEnd) { w, _, end -> w to end }
+        .mapLatest { (w, end) ->
+            val now = System.currentTimeMillis()
+            val span = w.hours * 3_600_000L
+            val from = (end ?: now) - span
+            val to = end ?: Long.MAX_VALUE
+            val shown = app.readings.between(from, to)
             ChartData(
-                app.readings.since(from), app.readings.fingersticksSince(from), app.predictor.forecast(),
-                app.readings.sensorStartsSince(from), app.readings.latestSensorStart(),
+                shown, app.readings.fingersticksBetween(from, to),
+                // The forecast belongs to the present only.
+                if (end == null) app.predictor.forecast() else emptyList(),
+                app.readings.sensorStartsBetween(from, to), app.readings.latestSensorStart(),
+                recent = if (end == null) shown.takeLast(2) else app.readings.newest(2, now - span),
+                end = end, oldest = app.readings.oldestTimestamp(),
+                events = app.readings.eventsBetween(from, to),
             )
         }
 
     val state: StateFlow<HomeState> = combine(app.settings.settings, app.status, window, readings, clock) { s, st, w, r, now ->
-        HomeState(s, st, w, r.readings, r.fingersticks, now, ready = true, r.forecast, r.sensorStarts, r.sensorStart)
+        HomeState(
+            s, st, w, r.readings, r.fingersticks, now, ready = true, r.forecast, r.sensorStarts, events = r.events,
+            sensorStart = r.sensorStart, recent = r.recent, chartEnd = r.end, oldest = r.oldest,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
+
+    /**
+     * Moves the chart one window back (-1) or forward (+1). Forward up to the present goes back to
+     * following it; backward stops at the oldest stored reading.
+     */
+    fun scrollChart(direction: Int) {
+        val st = state.value
+        val span = st.window.hours * 3_600_000L
+        val now = System.currentTimeMillis()
+        val end = (chartEnd.value ?: now) + direction * span
+        chartEnd.value = when {
+            end >= now -> null
+            else -> st.oldest?.let { end.coerceAtLeast(minOf(it + span, now)) } ?: end
+        }
+    }
+
+    /** A note added or changed: on the chart at once, then to the server and Nightscout. */
+    fun saveEvent(e: ChartEvent) = viewModelScope.launch {
+        app.readings.saveEvent(e)
+        app.events.sync()
+        app.nightscout.maybeUpload()
+    }
+
+    /** Kept as a deletion until the server has it, so the other phones remove it too. */
+    fun deleteEvent(e: ChartEvent) = saveEvent(e.copy(deleted = true, updated = System.currentTimeMillis()))
+
+    /** Back to the present (the "now" button, and whenever the app leaves the screen). */
+    fun chartToNow() {
+        chartEnd.value = null
+    }
 
     init {
         viewModelScope.launch { app.readings.prune(System.currentTimeMillis() - 90L * 24 * 3_600_000L) }
@@ -157,6 +220,11 @@ class MainViewModel : ViewModel() {
         if (delayed) app.alarms.scheduleTest(config.type, 10_000L) else app.alarms.test(config)
     }
     fun stopAlarmPreview() = app.alarms.stopPreview()
+
+    fun setSensorReminder(v: Boolean) = viewModelScope.launch {
+        app.settings.setSensorReminder(v)
+        if (v) app.sensorReminder.check()
+    }
 
     // ---------------------------------------------------------------- app updates
 

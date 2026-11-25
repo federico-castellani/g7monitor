@@ -24,6 +24,9 @@ object WatchContract {
     const val MMOL = "mmol"
     const val LOW = "low"
     const val HIGH = "high"
+    /** The last 3 hours, for the tile's chart: times (ms) and values (mg/dL), oldest first. */
+    const val HIST_TIME = "hist_t"
+    const val HIST_MGDL = "hist_v"
     /** Message to the watch with the phone's version name (the watch then offers its own update). */
     const val PHONE_VERSION = "/g7monitor/phone-version"
     /** Data item published by the watch app with its version. */
@@ -48,9 +51,10 @@ class WatchSync(private val app: G7App) {
 
     suspend fun push() = withContext(Dispatchers.IO) {
         val s = app.settings.current()
-        val recent = app.readings.since(System.currentTimeMillis() - 30 * 60_000L)
-        val latest = recent.lastOrNull() ?: return@withContext
-        val prev = recent.getOrNull(recent.size - 2)?.takeIf { latest.timestamp - it.timestamp < 12 * 60_000L }
+        val now = System.currentTimeMillis()
+        val history = app.readings.since(now - 3 * 3_600_000L)
+        val latest = history.lastOrNull()?.takeIf { it.timestamp >= now - 30 * 60_000L } ?: return@withContext
+        val prev = history.getOrNull(history.size - 2)?.takeIf { latest.timestamp - it.timestamp < 12 * 60_000L }
         val request = PutDataMapRequest.create(WatchContract.PATH).apply {
             dataMap.putLong(WatchContract.TIME, latest.timestamp)
             dataMap.putInt(WatchContract.MGDL, latest.mgdl)
@@ -59,6 +63,9 @@ class WatchSync(private val app: G7App) {
             dataMap.putBoolean(WatchContract.MMOL, s.useMmol)
             dataMap.putInt(WatchContract.LOW, s.lowMgdl)
             dataMap.putInt(WatchContract.HIGH, s.highMgdl)
+            // About 36 readings: well under a kilobyte.
+            dataMap.putLongArray(WatchContract.HIST_TIME, LongArray(history.size) { history[it].timestamp })
+            dataMap.putIntegerArrayList(WatchContract.HIST_MGDL, ArrayList(history.map { it.mgdl }))
         }.asPutDataRequest().setUrgent()
         runCatching { Tasks.await(client.putDataItem(request), 15, TimeUnit.SECONDS) }
     }

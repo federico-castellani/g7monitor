@@ -38,4 +38,10 @@
     <!-- Alarms from the phone -->
     <string name="w_channel_alarms">Allarmi glicemia</string>
     <string name="w_snooze">Posticipa %1$d min</string>
+
+    <!-- 20_tile -->
+
+    <!-- Tile -->
+    <string name="tile_glucose">Glicemia</string>
+    <string name="tile_at">alle %1$s</string>
 </resources>

@@ -12,6 +12,8 @@ import java.util.zip.GZIPOutputStream
 import kotlin.math.roundToInt
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
+import it.federico.g7monitor.data.ChartEvent
+import it.federico.g7monitor.data.EventType
 
 /**
  * Client for the G7 Monitor server. Plain HttpURLConnection (no extra libraries);
@@ -67,21 +69,68 @@ object ServerApi {
      * Follower: readings newer than [sinceMs], oldest first. Asked once per expected reading,
      * so the answer is usually a single row (well under 1 KB with headers).
      */
-    data class Fetched(val readings: List<GlucoseReading>, val fingersticks: List<Fingerstick>, val sensorStarts: List<Long>)
+    data class Fetched(
+        val readings: List<GlucoseReading>,
+        val fingersticks: List<Fingerstick>,
+        val sensorStarts: List<Long>,
+        /** Notes changed after the sequence number asked for; null from a server that does not know notes. */
+        val events: List<ChartEvent>? = null,
+    )
 
     /**
      * Readings after [sinceMs], meter results after [fingerSinceMs] and sensor starts after
      * [sensorSinceMs] (older servers send neither of the last two).
      */
-    fun fetchSince(base: String, token: String, sinceMs: Long, fingerSinceMs: Long, sensorSinceMs: Long): Fetched {
+    fun fetchSince(base: String, token: String, sinceMs: Long, fingerSinceMs: Long, sensorSinceMs: Long, eventSeq: Long = 0): Fetched {
         val json = JSONObject(
-            send("GET", "$base/api/v1/readings?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}&ssince=${sensorSinceMs / 1000}", token, null)
+            send(
+                "GET",
+                "$base/api/v1/readings?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}&ssince=${sensorSinceMs / 1000}&esince=$eventSeq",
+                token, null,
+            )
         )
         return Fetched(
             decode(json.getJSONArray("r")),
             json.optJSONArray("f")?.let(::decodeFingersticks) ?: emptyList(),
             json.optJSONArray("s")?.let(::decodeSensorStarts) ?: emptyList(),
+            json.optJSONArray("e")?.let(::decodeEvents),
         )
+    }
+
+    /** Notes added, changed or deleted here. @return how many the server stored (older versions are ignored). */
+    fun uploadEvents(base: String, token: String, list: List<ChartEvent>): Int {
+        val rows = org.json.JSONArray()
+        for (e in list) rows.put(encodeEvent(e))
+        return JSONObject(post("$base/api/v1/events", token, JSONObject().put("e", rows).toString().toByteArray())).optInt("n")
+    }
+
+    /** Notes changed on the server after sequence number [since] (deletions included). */
+    fun fetchEvents(base: String, token: String, since: Long): List<ChartEvent> =
+        decodeEvents(JSONObject(send("GET", "$base/api/v1/events?since=$since", token, null)).getJSONArray("e"))
+
+    internal fun encodeEvent(e: ChartEvent): JSONObject = JSONObject()
+        .put("id", e.id)
+        .put("ts", e.timestamp / 1000)
+        .put("type", e.type.wire)
+        .put("value", e.value ?: JSONObject.NULL)
+        .put("note", e.note ?: JSONObject.NULL)
+        .put("deleted", e.deleted)
+        .put("updated", e.updated)
+
+    /** Kinds this app does not know (from a newer phone) are skipped. */
+    internal fun decodeEvents(rows: org.json.JSONArray): List<ChartEvent> = buildList {
+        for (i in 0 until rows.length()) {
+            val o = rows.getJSONObject(i)
+            val type = EventType.of(o.optString("type")) ?: continue
+            add(
+                ChartEvent(
+                    id = o.getString("id"), timestamp = o.getLong("ts") * 1000, type = type,
+                    value = if (o.isNull("value")) null else o.getDouble("value"),
+                    note = if (o.isNull("note")) null else o.getString("note"),
+                    deleted = o.optBoolean("deleted"), updated = o.getLong("updated"), seq = o.optLong("seq"),
+                )
+            )
+        }
     }
 
     /** Sensor starts in unix seconds. @return how many the server did not have. */
@@ -112,8 +161,8 @@ object ServerApi {
      * Follower, live: opens the server's event stream (readings newer than [sinceMs] first, then each
      * new one as it is uploaded). Blocking. Close the returned connection to stop reading.
      */
-    fun openStream(base: String, token: String, sinceMs: Long, fingerSinceMs: Long, sensorSinceMs: Long): HttpURLConnection {
-        val url = "$base/api/v1/readings/stream?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}&ssince=${sensorSinceMs / 1000}"
+    fun openStream(base: String, token: String, sinceMs: Long, fingerSinceMs: Long, sensorSinceMs: Long, eventSeq: Long = 0): HttpURLConnection {
+        val url = "$base/api/v1/readings/stream?since=${sinceMs / 1000}&fsince=${fingerSinceMs / 1000}&ssince=${sensorSinceMs / 1000}&esince=$eventSeq"
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 15_000
         conn.readTimeout = STREAM_READ_TIMEOUT_MS
@@ -140,6 +189,7 @@ object ServerApi {
         onActivity: () -> Unit,
         onFingersticks: suspend (List<Fingerstick>) -> Unit,
         onSensorStarts: suspend (List<Long>) -> Unit,
+        onEvents: suspend (List<ChartEvent>) -> Unit,
         onRows: suspend (List<GlucoseReading>) -> Unit,
     ) {
         conn.inputStream.bufferedReader().use { reader ->
@@ -155,6 +205,7 @@ object ServerApi {
                         when (event) {
                             "fingerstick" -> onFingersticks(decodeFingersticks(data))
                             "sensor" -> onSensorStarts(decodeSensorStarts(data))
+                            "note" -> onEvents(decodeEvents(data))
                             "" -> onRows(decode(data))
                         }
                     }

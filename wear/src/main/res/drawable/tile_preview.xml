@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tile picker preview: a round screen with the value bar, arrow and the 3-hour chart -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp" android:height="192dp"
+    android:viewportWidth="192" android:viewportHeight="192">
+    <path android:fillColor="#FF000000" android:pathData="M96,0A96,96 0,1 1,96 192A96,96 0,1 1,96 0Z" />
+    <!-- time -->
+    <path android:fillColor="#FF5D6670" android:pathData="M78,44h36v4h-36z" />
+    <!-- value -->
+    <path android:fillColor="#FF4CD597" android:pathData="M58,58h58v30h-58z" />
+    <!-- arrow -->
+    <group android:pivotX="134" android:pivotY="73" android:rotation="45" android:translateX="0">
+        <path android:fillColor="#FF4CD597" android:pathData="M134,60L146,73L139,73L139,86L129,86L129,73L122,73Z" />
+    </group>
+    <!-- change -->
+    <path android:fillColor="#FF8A9099" android:pathData="M74,96h44v5h-44z" />
+    <!-- chart: target band, trace -->
+    <path android:fillColor="#294CD597" android:pathData="M28,114h136v22h-136z" />
+    <path android:strokeColor="#B4FFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M30,132 L48,128 L66,120 L84,116 L102,121 L120,126 L138,122 L156,117" />
+    <path android:fillColor="#FF4CD597" android:pathData="M156,117m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>

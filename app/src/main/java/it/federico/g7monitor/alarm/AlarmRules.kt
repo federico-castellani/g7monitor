@@ -12,6 +12,8 @@ object AlarmRules {
      * @param newest time of the newest reading ever stored (for signal loss), null if none
      * @param receiving the phone is supposed to receive data (collection / background download on)
      * @param warmingUp sensor warm-up: no readings expected yet
+     * @param predictedLow lowest value of the personal forecast within the next 30 minutes, null when
+     *   there is none (still learning, or no recent readings)
      */
     fun triggered(
         configs: Map<AlarmType, AlarmConfig>,
@@ -20,6 +22,7 @@ object AlarmRules {
         now: Long,
         receiving: Boolean,
         warmingUp: Boolean,
+        predictedLow: Int? = null,
     ): Set<AlarmType> {
         val out = mutableSetOf<AlarmType>()
         fun on(t: AlarmType) = configs[t]?.enabled == true
@@ -35,6 +38,11 @@ object AlarmRules {
             // The milder alarm stays quiet while the urgent one is true (even if that one was snoozed).
             if (!urgentLow && on(AlarmType.Low) && g < v(AlarmType.Low)) out += AlarmType.Low
             if (!urgentHigh && on(AlarmType.High) && g > v(AlarmType.High)) out += AlarmType.High
+            // Before it happens: still above the threshold now, below it within half an hour.
+            val lowNow = urgentLow || AlarmType.Low in out
+            if (!lowNow && on(AlarmType.PredictedLow) && predictedLow != null &&
+                g >= v(AlarmType.PredictedLow) && predictedLow < v(AlarmType.PredictedLow)
+            ) out += AlarmType.PredictedLow
 
             val rate = rate(recent)
             if (rate != null) {

@@ -92,16 +92,19 @@ import java.util.Locale
 import androidx.compose.ui.res.stringResource
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.EventRepeat
 
 /** Order shown in the list: from the lowest glucose to the highest, then signal. */
 private val ORDER = listOf(
-    AlarmType.UrgentLow, AlarmType.Low, AlarmType.FallingFast,
+    AlarmType.UrgentLow, AlarmType.Low, AlarmType.PredictedLow, AlarmType.FallingFast,
     AlarmType.RisingFast, AlarmType.High, AlarmType.UrgentHigh, AlarmType.SignalLoss,
 )
 
 private fun AlarmType.icon(): ImageVector = when (this) {
     AlarmType.UrgentLow -> Icons.Outlined.KeyboardDoubleArrowDown
     AlarmType.Low -> Icons.Outlined.ArrowDownward
+    AlarmType.PredictedLow -> Icons.Outlined.AutoAwesome
     AlarmType.FallingFast -> Icons.AutoMirrored.Outlined.TrendingDown
     AlarmType.RisingFast -> Icons.AutoMirrored.Outlined.TrendingUp
     AlarmType.High -> Icons.Outlined.ArrowUpward
@@ -110,7 +113,12 @@ private fun AlarmType.icon(): ImageVector = when (this) {
 }
 
 /** "≤ 55 mg/dL", "più di 2,0 mg/dL/min", "20 min senza letture". */
-fun AlarmConfig.valueText(mmol: Boolean, value: Int = this.value): String = when (type.kind) {
+fun AlarmConfig.valueText(mmol: Boolean, value: Int = this.value): String = when {
+    type == AlarmType.PredictedLow -> str(R.string.alarm_value_predicted, Glucose.format(value, mmol), Glucose.unit(mmol))
+    else -> valueTextByKind(mmol, value)
+}
+
+private fun AlarmConfig.valueTextByKind(mmol: Boolean, value: Int): String = when (type.kind) {
     ValueKind.Glucose -> {
         val op = when (type) {
             AlarmType.UrgentLow -> "≤"
@@ -166,6 +174,9 @@ fun AlarmsScreen(
     pausedUntil: Long? = null,
     /** Pause until a time, or resume (null). */
     onPause: (Long?) -> Unit = {},
+    /** Notifications before the end of the sensor's 10 days. */
+    sensorReminder: Boolean = true,
+    onSensorReminder: (Boolean) -> Unit = {},
     onBack: (() -> Unit)? = null,
 ) {
     Page(stringResource(R.string.alarms_title), onBack) {
@@ -194,6 +205,27 @@ fun AlarmsScreen(
                     }
                     Switch(checked = c.enabled, onCheckedChange = { onToggle(type, it) })
                 }
+            }
+        }
+        Card(
+            onClick = { onSensorReminder(!sensorReminder) },
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.EventRepeat, contentDescription = null,
+                    tint = if (sensorReminder) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                )
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.alarms_sensor_reminder), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        stringResource(R.string.alarms_sensor_reminder_text),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = sensorReminder, onCheckedChange = onSensorReminder)
             }
         }
         SectionCard(stringResource(R.string.alarms_test_notifications), Icons.Outlined.PlayArrow) {

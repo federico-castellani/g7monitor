@@ -50,13 +50,16 @@ enum class AlarmType(
         ValueKind.Glucose, 55, 40..70, 1, true, 15, BuiltInSound.UrgentLow, true),
     Low(R.string.alarm_low, R.string.alarm_low_text, 2,
         ValueKind.Glucose, 70, 55..100, 1, true, 30, BuiltInSound.Low, false),
-    UrgentHigh(R.string.alarm_urgent_high, R.string.alarm_urgent_high_text, 3,
+    /** From the personal forecast: off until the user turns it on (it needs days of readings to learn). */
+    PredictedLow(R.string.alarm_predicted_low, R.string.alarm_predicted_low_text, 3,
+        ValueKind.Glucose, 70, 55..100, 1, false, 30, BuiltInSound.Falling, false),
+    UrgentHigh(R.string.alarm_urgent_high, R.string.alarm_urgent_high_text, 4,
         ValueKind.Glucose, 250, 180..400, 5, true, 30, BuiltInSound.UrgentHigh, true),
-    High(R.string.alarm_high, R.string.alarm_high_text, 5,
+    High(R.string.alarm_high, R.string.alarm_high_text, 6,
         ValueKind.Glucose, 180, 120..300, 5, true, 60, BuiltInSound.High, false),
-    FallingFast(R.string.alarm_falling, R.string.alarm_falling_text, 4,
+    FallingFast(R.string.alarm_falling, R.string.alarm_falling_text, 5,
         ValueKind.Rate, 20, 10..50, 5, true, 30, BuiltInSound.Falling, false),
-    RisingFast(R.string.alarm_rising, R.string.alarm_rising_text, 6,
+    RisingFast(R.string.alarm_rising, R.string.alarm_rising_text, 7,
         ValueKind.Rate, 20, 10..50, 5, false, 30, BuiltInSound.Rising, false),
     SignalLoss(R.string.alarm_signal, R.string.alarm_signal_text, 1,
         ValueKind.Minutes, 20, 10..120, 5, true, 30, BuiltInSound.Signal, false);
@@ -122,6 +125,25 @@ class AlarmRepository(private val context: Context) {
     }
 
     suspend fun current(): Map<AlarmType, AlarmConfig> = configs.first()
+
+    /** Every alarm as set (see SettingsBackup). */
+    suspend fun backup(): JSONObject = JSONObject().apply {
+        for ((type, c) in current()) put(type.name, JSONObject(c.toJson()))
+    }
+
+    /**
+     * Alarms from a backup, checked like saved ones. A sound picked from the phone goes back to
+     * the built-in one: it is a file of the phone the backup comes from. @return how many
+     */
+    suspend fun restore(o: JSONObject): Int {
+        var n = 0
+        for (type in AlarmType.entries) {
+            val c = AlarmConfig.fromJson(type, o.optJSONObject(type.name)?.toString() ?: continue)
+            save(if (c.builtInSound == null) c.copy(sound = type.sound.name) else c)
+            n++
+        }
+        return n
+    }
 
     suspend fun save(config: AlarmConfig) {
         context.alarmStore.edit { it[key(config.type)] = config.toJson() }

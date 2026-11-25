@@ -94,12 +94,26 @@ import androidx.compose.ui.res.stringResource
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.LastPage
+import androidx.compose.ui.text.style.TextAlign
+import it.federico.g7monitor.data.ChartEvent
+import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     state: HomeState,
     onWindow: (ChartWindow) -> Unit,
+    /** One window back (-1) or forward (+1). */
+    onScrollChart: (Int) -> Unit = {},
+    onChartNow: () -> Unit = {},
+    onSaveEvent: (ChartEvent) -> Unit = {},
+    onDeleteEvent: (ChartEvent) -> Unit = {},
     /** Sensor settings (pairing code), from the setup card. */
     onOpenSensorSettings: () -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -116,6 +130,16 @@ fun HomeScreen(
     updateActions: UpdateActions? = null,
 ) {
     val fromServer = state.settings.dataSource == DataSource.Server
+    // The note being added (null event, at a time) or edited.
+    var editing by remember { mutableStateOf<Pair<ChartEvent?, Long>?>(null) }
+    editing?.let { (event, at) ->
+        EventDialog(
+            initial = event, at = at,
+            onSave = { onSaveEvent(it); editing = null },
+            onDelete = { onDeleteEvent(it); editing = null },
+            onDismiss = { editing = null },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -168,19 +192,24 @@ fun HomeScreen(
                         ) { Text(w.label) }
                     }
                 }
+                ChartNavigator(state, onScrollChart, onChartNow)
                 GlucoseChart(
                     readings = state.readings,
                     fingersticks = state.fingersticks,
                     windowHours = state.window.hours,
-                    now = state.now,
+                    now = state.chartTo,
+                    live = state.live,
                     lowMgdl = s.lowMgdl,
                     highMgdl = s.highMgdl,
                     mmol = s.useMmol,
                     smoothing = s.chartSmoothing,
                     showDots = s.chartDots,
                     showFingersticks = s.chartFingersticks,
-                    forecast = if (s.chartForecast && !state.isStale) state.forecast else emptyList(),
+                    forecast = if (s.chartForecast && !state.isStale && state.live) state.forecast else emptyList(),
                     sensorStarts = state.sensorStarts,
+                    events = state.events,
+                    onEventClick = { editing = it to it.timestamp },
+                    onLongPress = { t -> editing = null to minOf(t, System.currentTimeMillis()) },
                 )
                 state.fingersticks.lastOrNull()?.let { f ->
                     val time = remember(f.timestamp) { SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(f.timestamp)) }
@@ -202,6 +231,12 @@ fun HomeScreen(
                         )
                     }
                 }
+                // Also by holding a finger on the chart, at that time.
+                AssistChip(
+                    onClick = { editing = null to System.currentTimeMillis() },
+                    label = { Text(stringResource(R.string.event_add)) },
+                    leadingIcon = { Icon(Icons.Outlined.EditNote, contentDescription = null, Modifier.size(18.dp)) },
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(Icons.Outlined.TrackChanges, stringResource(R.string.home_in_range), state.timeInRange?.let { "$it%" } ?: "—", Modifier.weight(1f))
@@ -211,6 +246,49 @@ fun HomeScreen(
             Spacer(Modifier.height(20.dp))
         }
     }
+}
+
+/** ‹ the period shown › : the last hours, or a day and times when looking at the past. */
+@Composable
+private fun ChartNavigator(state: HomeState, onScroll: (Int) -> Unit, onNow: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { onScroll(-1) }, enabled = state.canGoBack) {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, stringResource(R.string.chart_earlier))
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            if (state.live) {
+                Text(stringResource(R.string.chart_last_hours, state.window.hours), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            } else {
+                val (day, hours) = remember(state.chartFrom, state.chartTo) { periodLabel(state.chartFrom, state.chartTo) }
+                Text(day, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+                Text(hours, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+            }
+        }
+        IconButton(onClick = { onScroll(1) }, enabled = !state.live) {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, stringResource(R.string.chart_later))
+        }
+        if (!state.live) IconButton(onClick = onNow) {
+            Icon(Icons.AutoMirrored.Outlined.LastPage, stringResource(R.string.chart_back_to_now), tint = scheme.primary)
+        }
+    }
+}
+
+/** "Monday 24 November" and "08:00 – 14:00", or two days when the period crosses midnight. */
+private fun periodLabel(from: Long, to: Long): Pair<String, String> {
+    val locale = Locale.getDefault()
+    val time = SimpleDateFormat("HH:mm", locale)
+    val cal = { t: Long -> java.util.Calendar.getInstance().apply { timeInMillis = t } }
+    val a = cal(from); val b = cal(to - 1)
+    val sameDay = a.get(java.util.Calendar.YEAR) == b.get(java.util.Calendar.YEAR) &&
+        a.get(java.util.Calendar.DAY_OF_YEAR) == b.get(java.util.Calendar.DAY_OF_YEAR)
+    val day = if (sameDay) {
+        SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "EEEEdMMMM"), locale).format(Date(from))
+    } else {
+        val f = SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, "EEEdMMM"), locale)
+        "${f.format(Date(from))} – ${f.format(Date(to))}"
+    }
+    return day.replaceFirstChar { it.titlecase(locale) } to "${time.format(Date(from))} – ${time.format(Date(to))}"
 }
 
 @Composable

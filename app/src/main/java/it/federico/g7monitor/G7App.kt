@@ -24,6 +24,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import it.federico.g7monitor.net.NightscoutUploader
 import it.federico.g7monitor.predict.Predictor
+import it.federico.g7monitor.alarm.SensorReminder
+import it.federico.g7monitor.net.EventSync
+import it.federico.g7monitor.health.HealthConnectWriter
 
 /** Manual dependency container: the app is small enough not to need a DI framework. */
 class G7App : Application() {
@@ -42,6 +45,13 @@ class G7App : Application() {
     lateinit var alarms: AlarmEngine
         private set
     lateinit var watch: WatchSync
+        private set
+    lateinit var sensorReminder: SensorReminder
+        private set
+    /** Notes on the chart, shared through the server. */
+    lateinit var events: EventSync
+        private set
+    lateinit var health: HealthConnectWriter
         private set
     /** Personal glucose forecast, learned from the stored readings. */
     val predictor by lazy { Predictor(this) }
@@ -69,6 +79,9 @@ class G7App : Application() {
         alarmSettings = AlarmRepository(this)
         alarms = AlarmEngine(this)
         watch = WatchSync(this)
+        sensorReminder = SensorReminder(this)
+        events = EventSync(this)
+        health = HealthConnectWriter(this)
         scope.launch { runCatching { settings.encryptOldSecrets() } }
         // After an update of the phone app, the watch offers its own (one tap, no PC).
         scope.launch { watch.announceVersion() }
@@ -81,6 +94,11 @@ class G7App : Application() {
             }
         )
         nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_REMINDERS, getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = getString(R.string.channel_reminders_text)
+            }
+        )
+        nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ALARMS, getString(R.string.channel_alarms), NotificationManager.IMPORTANCE_HIGH).apply {
                 description = getString(R.string.channel_alarms_text)
                 // Sound and vibration are played by the app on the alarm stream, with the user's choices.
@@ -90,7 +108,12 @@ class G7App : Application() {
             }
         )
         // Every new reading, from the sensor or from the server, is checked against the alarms.
-        scope.launch { readings.changes.collect { alarms.evaluate() } }
+        scope.launch {
+            readings.changes.collect {
+                alarms.evaluate()
+                runCatching { sensorReminder.check() }
+            }
+        }
         // The ringing alarm goes to the watch too (and away from it when it stops).
         scope.launch { alarms.active.collect { watch.sendAlarm(it) } }
         // ...and sent to the watch complications (again when unit or target range change).
@@ -103,6 +126,7 @@ class G7App : Application() {
     companion object {
         const val CHANNEL_STATUS = "status"
         const val CHANNEL_ALARMS = "alarms"
+        const val CHANNEL_REMINDERS = "reminders"
         lateinit var instance: G7App
             private set
 

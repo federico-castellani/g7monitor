@@ -104,6 +104,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import it.federico.g7monitor.G7App
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.HealthAndSafety
 
 class SettingsActions(
     val onPairingCode: (String) -> Unit,
@@ -134,6 +136,8 @@ enum class SettingsPage(@param:StringRes val title: Int) {
     Watch(R.string.page_watch),
     Chart(R.string.page_chart),
     Nightscout(R.string.page_nightscout),
+    Backup(R.string.page_backup),
+    Health(R.string.page_health),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -219,6 +223,11 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
                         else -> ok
                     },
                 ) { actions.onOpenPage(SettingsPage.Nightscout) }
+                MenuRow(
+                    Icons.Outlined.HealthAndSafety, stringResource(R.string.page_health),
+                    stringResource(if (settings.healthConnect) R.string.menu_health_on else R.string.menu_health_off),
+                    if (settings.healthConnect) ok else null,
+                ) { actions.onOpenPage(SettingsPage.Health) }
             }
         }
         MenuGroup(stringResource(R.string.menu_app)) {
@@ -247,6 +256,9 @@ fun SettingsScreen(settings: AppSettings, serviceRunning: Boolean, update: Updat
             ) { actions.onOpenPage(SettingsPage.Source) }
             MenuRow(Icons.AutoMirrored.Outlined.ShowChart, stringResource(R.string.page_chart), chartSummary(settings)) { actions.onOpenPage(SettingsPage.Chart) }
             MenuRow(Icons.Outlined.Watch, stringResource(R.string.page_watch), stringResource(R.string.menu_watch_summary)) { actions.onOpenPage(SettingsPage.Watch) }
+            MenuRow(Icons.Outlined.SettingsBackupRestore, stringResource(R.string.page_backup), stringResource(R.string.menu_backup_summary)) {
+                actions.onOpenPage(SettingsPage.Backup)
+            }
             val available = update.state is UpdateState.Available || update.state is UpdateState.NeedsPermission
             MenuRow(
                 Icons.Outlined.SystemUpdate, stringResource(R.string.page_updates), updateSummary(update.state, update.installed),
@@ -289,6 +301,8 @@ fun SettingsPageScreen(
             SettingsPage.Watch -> WatchSections()
             SettingsPage.Chart -> ChartSections(settings)
             SettingsPage.Nightscout -> NightscoutSections(settings)
+            SettingsPage.Backup -> BackupSections()
+            SettingsPage.Health -> HealthConnectSections(settings)
         }
     }
 }

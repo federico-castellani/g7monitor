@@ -61,6 +61,7 @@ class Uploader(private val app: G7App) {
             }
             sent += uploadFingersticks(s.serverUrl, s.serverToken)
             uploadSensorStarts(s.serverUrl, s.serverToken)
+            app.events.sync()
             failures = 0
             retryAt = 0
             if (sent > 0 || force || s.uploadError != null) app.settings.setUploadResult(now, null)

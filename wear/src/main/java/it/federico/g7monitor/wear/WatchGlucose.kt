@@ -15,6 +15,9 @@ object WatchContract {
     const val MMOL = "mmol"
     const val LOW = "low"
     const val HIGH = "high"
+    /** The last 3 hours, for the tile's chart: times (ms) and values (mg/dL), oldest first. */
+    const val HIST_TIME = "hist_t"
+    const val HIST_MGDL = "hist_v"
     /** Message from the phone with its version name (after an update of the phone app). */
     const val PHONE_VERSION = "/g7monitor/phone-version"
     /** Data item with this watch app's version, read by the phone. */
@@ -109,6 +112,20 @@ object GlucoseStore {
             .putBoolean("mmol", g.mmol).putInt("low", g.low).putInt("high", g.high)
             .apply()
     }
+
+    /** The last 3 hours sent with the reading (for the tile's chart); a phone app too old to send them sends none. */
+    fun saveHistory(context: Context, map: DataMap) {
+        val times = map.getLongArray(WatchContract.HIST_TIME) ?: return
+        val values = map.getIntegerArrayList(WatchContract.HIST_MGDL) ?: return
+        if (times.size != values.size) return
+        prefs(context).edit().putString("history", times.indices.joinToString(";") { "${times[it]},${values[it]}" }).apply()
+    }
+
+    fun loadHistory(context: Context): List<Pair<Long, Int>> =
+        prefs(context).getString("history", null)?.split(';')?.mapNotNull { row ->
+            val (t, v) = row.split(',').takeIf { it.size == 2 } ?: return@mapNotNull null
+            (t.toLongOrNull() ?: return@mapNotNull null) to (v.toIntOrNull() ?: return@mapNotNull null)
+        } ?: emptyList()
 
     fun load(context: Context): WatchGlucose? {
         val p = prefs(context)

@@ -326,6 +326,95 @@
     <string name="alarm_test_later_toast">The test alarm will ring in 10 seconds: lock the phone</string>
     <string name="alarm_test_later">Test in 10 s</string>
 
+    <!-- 31_predicted -->
+
+    <!-- Low predicted -->
+    <string name="alarm_predicted_low">Low glucose predicted</string>
+    <string name="alarm_predicted_low_text">Rings when your personal forecast expects glucose below the threshold within 30 minutes, before it gets there. It needs at least 3 days of readings to learn.</string>
+    <string name="alarm_value_predicted">&lt; %1$s %2$s within 30 min</string>
+    <string name="alarm_predicted_now">Expected %1$s %2$s in %3$d min (now %4$s)</string>
+
+    <!-- 32_history -->
+
+    <!-- Chart history -->
+    <string name="chart_last_hours">Last %1$d hours</string>
+    <string name="chart_earlier">Earlier</string>
+    <string name="chart_later">Later</string>
+    <string name="chart_back_to_now">Back to now</string>
+
+    <!-- 33_reminder -->
+
+    <!-- Sensor change reminder -->
+    <string name="channel_reminders">Reminders</string>
+    <string name="channel_reminders_text">Sensor change</string>
+    <string name="reminder_sensor_day">Sensor change tomorrow</string>
+    <string name="reminder_sensor_day_text">End of the 10 days: %1$s. Keep a new sensor ready: Dexcom\'s extra 12 hours are only a margin for the change.</string>
+    <string name="reminder_sensor_hours">Sensor change in 2 hours</string>
+    <string name="reminder_sensor_hours_text">End of the 10 days: %1$s.</string>
+    <string name="reminder_sensor_over">Time to change the sensor</string>
+    <string name="reminder_sensor_over_text">The 10 days are over. The sensor still works in the 12-hour grace period, until %1$s.</string>
+    <string name="alarms_sensor_reminder">Sensor change reminder</string>
+    <string name="alarms_sensor_reminder_text">A notification a day and 2 hours before the end of the 10 days, and when they are over</string>
+
+    <!-- 34_events -->
+
+    <!-- Notes on the chart -->
+    <string name="event_insulin">Insulin</string>
+    <string name="event_carbs">Carbs</string>
+    <string name="event_exercise">Exercise</string>
+    <string name="event_note">Note</string>
+    <string name="event_add">Add note</string>
+    <string name="event_new_title">New note</string>
+    <string name="event_edit_title">Edit note</string>
+    <string name="event_value_insulin">Units of insulin</string>
+    <string name="event_value_carbs">Grams of carbs</string>
+    <string name="event_value_exercise">Minutes</string>
+    <string name="event_text">Note (optional)</string>
+    <string name="event_text_required">Note</string>
+    <string name="event_time">Time: %1$s</string>
+    <string name="event_save">Save</string>
+    <string name="event_delete">Delete</string>
+    <string name="events_read_only">Notes stay on this phone: the account can only read</string>
+    <string name="events_old_server">The server does not know notes yet: update it to share them</string>
+    <string name="events_received">Notes received: %1$d</string>
+
+    <!-- 35_backup -->
+
+    <!-- Settings backup -->
+    <string name="page_backup">Backup</string>
+    <string name="menu_backup_summary">Save or restore settings and alarms</string>
+    <string name="backup_title">Settings backup</string>
+    <string name="backup_explain">A file with settings and alarms, to set up another phone, or this one after a reset. It holds no passwords, tokens or sensor keys: the links to the server and Nightscout have to be made again.</string>
+    <string name="backup_export">Save to a file</string>
+    <string name="backup_import">Restore from a file</string>
+    <string name="backup_saved">Backup saved</string>
+    <string name="backup_save_failed">Could not save the file</string>
+    <string name="backup_import_title">Restore the settings?</string>
+    <string name="backup_import_text">The settings and alarms in the file replace the current ones.</string>
+    <string name="backup_import_confirm">Restore</string>
+    <string name="backup_restored">Settings restored: %1$d</string>
+    <string name="backup_not_valid">This file is not a G7 Monitor backup</string>
+
+    <!-- 36_health -->
+
+    <!-- Health Connect -->
+    <string name="page_health">Health Connect</string>
+    <string name="menu_health_on">Writing the glucose</string>
+    <string name="menu_health_off">Optional · off</string>
+    <string name="hc_explain">Writes the sensor readings and the meter results to Health Connect, where the health apps you allow can read them. G7 Monitor reads nothing from it.</string>
+    <string name="hc_write">Write the glucose</string>
+    <string name="hc_write_text">Every new reading, plus the last 7 days when turned on</string>
+    <string name="hc_unavailable">Health Connect is not available on this phone</string>
+    <string name="hc_update_needed">Health Connect needs to be installed or updated</string>
+    <string name="hc_install">Open the Play Store</string>
+    <string name="hc_permission_missing">Permission to write the glucose not granted</string>
+    <string name="hc_open">Open Health Connect</string>
+    <string name="hc_written">Health Connect: %1$d values written</string>
+    <string name="hc_failed">Health Connect: not written (%1$s), trying again at the next reading</string>
+    <string name="hc_rationale_title">G7 Monitor and Health Connect</string>
+    <string name="hc_rationale_text">G7 Monitor asks only to write blood glucose: the readings of your G7 sensor and the values of your paired meter, so that the health apps you choose can show them. It reads no data from Health Connect, and the values are not shared with anyone else. You can turn this off at any time in G7 Monitor (Settings → Health Connect) or in Health Connect.</string>
+    <string name="hc_rationale_close">Close</string>
+
     <!-- 40_sensor -->
 
     <!-- Sensor states (from the G7) -->

@@ -100,6 +100,21 @@
                 android:value="0" />
         </service>
 
+        <!-- tile: value, arrow, change and the last 3 hours -->
+        <service
+            android:name=".tile.GlucoseTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_glucose"
+            android:label="@string/tile_glucose"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/tile_preview" />
+        </service>
+
         <service
             android:name=".complication.DeltaComplicationService"
             android:exported="true"

@@ -79,6 +79,8 @@ dependencies {
     implementation(libs.play.services.code.scanner)
     // Wear OS Data Layer: sends the latest reading to the watch complications
     implementation(libs.play.services.wearable)
+    // Health Connect: the readings to the phone's health data (optional, off by default)
+    implementation(libs.androidx.health.connect)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     testImplementation(libs.junit)

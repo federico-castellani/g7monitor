@@ -84,7 +84,9 @@ class Follower(private val app: G7App) {
     }
 
     private suspend fun stream(url: String, token: String, since: Long) = coroutineScope {
-        val conn = withContext(Dispatchers.IO) { ServerApi.openStream(url, token, since, fingerSince(), sensorSince()) }
+        // Notes changed here while the stream was closed go up first.
+        app.events.sync()
+        val conn = withContext(Dispatchers.IO) { ServerApi.openStream(url, token, since, fingerSince(), sensorSince(), app.events.since(url)) }
         connection = conn
         // A blocking socket read ignores coroutine cancellation: closing the connection ends it.
         val closer = launch { try { awaitCancellation() } finally { conn.disconnect() } }
@@ -99,6 +101,7 @@ class Follower(private val app: G7App) {
                     onActivity = { lastActivity = System.currentTimeMillis() },
                     onFingersticks = { list -> receivedFingersticks(list) },
                     onSensorStarts = { list -> app.readings.addSensorStarts(list, fromServer = true) },
+                    onEvents = { list -> app.events.received(url, list) },
                 ) { rows -> received(rows) }
             }
         } finally {
@@ -127,9 +130,10 @@ class Follower(private val app: G7App) {
             val s = app.settings.current()
             if (s.dataSource != DataSource.Server || !s.followConnected) return@withContext false
             try {
-                val fetched = ServerApi.fetchSince(s.followUrl, s.followToken, since(), fingerSince(), sensorSince())
+                val fetched = ServerApi.fetchSince(s.followUrl, s.followToken, since(), fingerSince(), sensorSince(), app.events.since(s.followUrl))
                 receivedFingersticks(fetched.fingersticks)
                 app.readings.addSensorStarts(fetched.sensorStarts, fromServer = true)
+                fetched.events?.let { app.events.received(s.followUrl, it) }
                 received(fetched.readings, always = true)
                 failures = 0
                 true

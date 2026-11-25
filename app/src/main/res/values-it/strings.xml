@@ -325,6 +325,95 @@
     <string name="alarm_test_later_toast">L\'allarme di prova suonerà tra 10 secondi: blocca il telefono</string>
     <string name="alarm_test_later">Prova tra 10 s</string>
 
+    <!-- 31_predicted -->
+
+    <!-- Low predicted -->
+    <string name="alarm_predicted_low">Glicemia bassa prevista</string>
+    <string name="alarm_predicted_low_text">Suona quando la tua previsione personale prevede la glicemia sotto la soglia entro 30 minuti, prima che ci arrivi. Servono almeno 3 giorni di letture per imparare.</string>
+    <string name="alarm_value_predicted">&lt; %1$s %2$s entro 30 min</string>
+    <string name="alarm_predicted_now">Prevista %1$s %2$s tra %3$d min (ora %4$s)</string>
+
+    <!-- 32_history -->
+
+    <!-- Chart history -->
+    <string name="chart_last_hours">Ultime %1$d ore</string>
+    <string name="chart_earlier">Prima</string>
+    <string name="chart_later">Dopo</string>
+    <string name="chart_back_to_now">Torna a ora</string>
+
+    <!-- 33_reminder -->
+
+    <!-- Sensor change reminder -->
+    <string name="channel_reminders">Promemoria</string>
+    <string name="channel_reminders_text">Cambio del sensore</string>
+    <string name="reminder_sensor_day">Cambio sensore domani</string>
+    <string name="reminder_sensor_day_text">Fine dei 10 giorni: %1$s. Tieni pronto un sensore nuovo: le 12 ore in più di Dexcom sono solo un margine per il cambio.</string>
+    <string name="reminder_sensor_hours">Cambio sensore tra 2 ore</string>
+    <string name="reminder_sensor_hours_text">Fine dei 10 giorni: %1$s.</string>
+    <string name="reminder_sensor_over">È ora di cambiare il sensore</string>
+    <string name="reminder_sensor_over_text">I 10 giorni sono finiti. Il sensore funziona ancora nelle 12 ore di tolleranza, fino a %1$s.</string>
+    <string name="alarms_sensor_reminder">Promemoria cambio sensore</string>
+    <string name="alarms_sensor_reminder_text">Una notifica un giorno e 2 ore prima della fine dei 10 giorni, e quando finiscono</string>
+
+    <!-- 34_events -->
+
+    <!-- Notes on the chart -->
+    <string name="event_insulin">Insulina</string>
+    <string name="event_carbs">Carboidrati</string>
+    <string name="event_exercise">Attività</string>
+    <string name="event_note">Nota</string>
+    <string name="event_add">Aggiungi nota</string>
+    <string name="event_new_title">Nuova nota</string>
+    <string name="event_edit_title">Modifica nota</string>
+    <string name="event_value_insulin">Unità di insulina</string>
+    <string name="event_value_carbs">Grammi di carboidrati</string>
+    <string name="event_value_exercise">Minuti</string>
+    <string name="event_text">Nota (facoltativa)</string>
+    <string name="event_text_required">Nota</string>
+    <string name="event_time">Ora: %1$s</string>
+    <string name="event_save">Salva</string>
+    <string name="event_delete">Elimina</string>
+    <string name="events_read_only">Le note restano su questo telefono: l\'account può solo leggere</string>
+    <string name="events_old_server">Il server non conosce ancora le note: aggiornalo per condividerle</string>
+    <string name="events_received">Note ricevute: %1$d</string>
+
+    <!-- 35_backup -->
+
+    <!-- Settings backup -->
+    <string name="page_backup">Backup</string>
+    <string name="menu_backup_summary">Salva o ripristina impostazioni e allarmi</string>
+    <string name="backup_title">Backup delle impostazioni</string>
+    <string name="backup_explain">Un file con impostazioni e allarmi, per configurare un altro telefono o questo dopo un ripristino. Non contiene password, token né chiavi del sensore: i collegamenti a server e Nightscout vanno rifatti.</string>
+    <string name="backup_export">Salva in un file</string>
+    <string name="backup_import">Ripristina da un file</string>
+    <string name="backup_saved">Backup salvato</string>
+    <string name="backup_save_failed">Impossibile salvare il file</string>
+    <string name="backup_import_title">Ripristinare le impostazioni?</string>
+    <string name="backup_import_text">Le impostazioni e gli allarmi del file sostituiscono quelli attuali.</string>
+    <string name="backup_import_confirm">Ripristina</string>
+    <string name="backup_restored">Impostazioni ripristinate: %1$d</string>
+    <string name="backup_not_valid">Questo file non è un backup di G7 Monitor</string>
+
+    <!-- 36_health -->
+
+    <!-- Health Connect -->
+    <string name="page_health">Health Connect</string>
+    <string name="menu_health_on">Scrittura della glicemia attiva</string>
+    <string name="menu_health_off">Facoltativo · spento</string>
+    <string name="hc_explain">Scrive le letture del sensore e i valori del glucometro in Health Connect, dove possono leggerli le app di salute che autorizzi. G7 Monitor non legge nulla.</string>
+    <string name="hc_write">Scrivi la glicemia</string>
+    <string name="hc_write_text">Ogni nuova lettura, più gli ultimi 7 giorni all\'attivazione</string>
+    <string name="hc_unavailable">Health Connect non è disponibile su questo telefono</string>
+    <string name="hc_update_needed">Health Connect va installato o aggiornato</string>
+    <string name="hc_install">Apri il Play Store</string>
+    <string name="hc_permission_missing">Permesso di scrivere la glicemia non concesso</string>
+    <string name="hc_open">Apri Health Connect</string>
+    <string name="hc_written">Health Connect: %1$d valori scritti</string>
+    <string name="hc_failed">Health Connect: scrittura non riuscita (%1$s), riprovo alla prossima lettura</string>
+    <string name="hc_rationale_title">G7 Monitor e Health Connect</string>
+    <string name="hc_rationale_text">G7 Monitor chiede solo di scrivere la glicemia: le letture del tuo sensore G7 e i valori del glucometro abbinato, perché le app di salute che scegli possano mostrarli. Non legge alcun dato da Health Connect e i valori non vengono condivisi con nessun altro. Puoi disattivarlo quando vuoi in G7 Monitor (Impostazioni → Health Connect) o in Health Connect.</string>
+    <string name="hc_rationale_close">Chiudi</string>
+
     <!-- 40_sensor -->
 
     <!-- Sensor states (from the G7) -->

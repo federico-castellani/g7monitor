@@ -10,15 +10,19 @@ The app is in English and Italian and follows the phone's language. On Android 1
 
 - **Sensor**: finds the G7, connects with the 4-digit pairing code, receives a reading every 5 minutes and fills in missed readings automatically (backfill, up to 24 h).
 - **Home**: current value, trend arrow, change since the previous reading, time since the last reading, sensor day and expiry, warm-up countdown.
-- **Chart**: 3 / 6 / 12 / 24 h with the target range; touch and drag to read single values. Optional line smoothing, reading dots and glucose meter markers (*Settings → Chart*).
+- **Chart**: 3 / 6 / 12 / 24 h with the target range; touch and drag to read single values; the arrows above it go back in time (up to 90 days). Optional line smoothing, reading dots and glucose meter markers (*Settings → Chart*).
+- **Notes on the chart**: insulin, carbs, exercise and free-text notes, shared through the server with the other phones and the website, and sent to Nightscout.
 - **Statistics**: time in range, average, number of readings.
-- **Alarms**: urgent low, low, high, urgent high, falling fast, rising fast, signal loss. Each has its own threshold, snooze time, sound, volume and mode (sound and vibration, vibration only, sound only).
+- **Alarms**: urgent low, low, low predicted, high, urgent high, falling fast, rising fast, signal loss. Each has its own threshold, snooze time, sound, volume and mode (sound and vibration, vibration only, sound only).
+- **Sensor change reminder**: a notification a day and 2 hours before the end of the sensor's 10 days, and when they are over.
 - **Notification** with the latest value and a small chart; optionally the **glucose number in the status bar** instead of the app icon.
 - **Home screen widget** with value, arrow and a 3-hour chart.
 - **Bluetooth glucose meter** (optional), for meter checks next to the sensor values.
 - **Upload** to a [G7 Monitor Server](https://github.com/federico-castellani/g7monitor-server) and/or to **Nightscout**.
 - **Follower mode**: another phone can show the same glucose, received from a G7 Monitor Server, with no sensor.
-- **Wear OS**: complications for any watch face, and alarms on the watch with a full-screen page and a snooze button.
+- **Wear OS**: complications for any watch face, a tile with the last 3 hours, and alarms on the watch with a full-screen page and a snooze button.
+- **Health Connect** (optional): the readings and meter results written to the phone's health data.
+- **Settings backup** to a file, to set up a new phone quickly.
 - mg/dL or mmol/L, adjustable target range, light and dark theme with dynamic colours.
 
 ## Requirements
@@ -59,6 +63,14 @@ Set them in the **Alarms** tab: tap an alarm for its threshold, snooze time, sou
 - The switch at the top pauses **all** alarms for a while, or until you turn them back on.
 - **Test alarm** sets one off as if it were real, marked as a test; *Test in 10 s* gives you time to lock the phone.
 - The alarms page shows a warning when something would keep an alarm from being heard (notifications off, alarm volume at zero, data collection off).
+- **Low predicted** (off by default) uses the personal forecast: it rings while the glucose is still above its threshold but the forecast goes below it within 30 minutes. The forecast needs a few days of readings to learn, so the alarm is silent until then.
+- **Sensor change reminder** (switch at the bottom of the page, on by default): Dexcom gives a G7 10 days plus a 12-hour grace period for the change; the reminders count the 10 days only, so the new sensor can be put on calmly.
+
+## Notes on the chart
+
+Tap **Add note** under the chart, or hold a finger on the chart to add one at that time: insulin (units), carbs (grams), exercise (minutes) or a free-text note, each with an optional text and a time you can change. Notes appear as coloured tags along the time axis; tap one to edit or delete it.
+
+With a G7 Monitor Server, notes go to the website and to every phone, and a follower can add them too (if its account may write). With Nightscout, they are sent as *Correction Bolus*, *Carb Correction*, *Exercise* and *Note* treatments; a note changed after it was sent stays as it was on Nightscout.
 
 ## Uploading and following
 
@@ -94,6 +106,14 @@ Choose **From the server** on first start, or later in *Settings → Data source
 
 After every measurement the meter sends the result to the phone by itself within a few seconds. Results appear as purple diamonds on the chart, with the difference from the sensor at the same time. They are uploaded to the server and to Nightscout, and they never set off alarms. Control solution tests are ignored, and a wrong meter clock is corrected.
 
+## Health Connect
+
+*Settings → Health Connect* (sensor mode): turn on **Write the glucose** and allow it in the Health Connect window. Every new reading is then written as blood glucose (interstitial fluid), meter results as capillary blood, plus the last 7 days when you turn it on. The app only writes, it never reads from Health Connect.
+
+## Settings backup
+
+*Settings → Backup*: **Save to a file** writes settings and alarms to a JSON file wherever you choose; **Restore from a file** reads it back on another phone or after a reinstall. The file holds no passwords, tokens or sensor keys: links to the server and Nightscout have to be made again (their addresses are filled in for you).
+
 ## Display options
 
 - **Settings → Display**: mg/dL or mmol/L, target range, and **Glucose in the status bar** (off by default). When on, the status bar shows the current value instead of the app icon; the icon comes back after 15 minutes without readings.
@@ -114,6 +134,10 @@ The watch app receives the glucose from the phone; it works in both sensor and f
 To add one: long-press the watch face → *Customise* → tap a complication slot → *G7 Monitor*. Tapping a complication opens the glucose screen on the watch.
 
 Battery: the watch never asks for data (the phone sends each reading), the watch face counts the minutes by itself, and after 15 minutes without readings the value turns into `---` without waking the watch.
+
+### Tile
+
+Swipe from the watch face to the tiles and add **Glucose** (long-press a tile → *+*): the value coloured by range, the arrow, the change, the time of the reading and a small chart of the last 3 hours. It turns grey after 15 minutes without readings. Tapping it opens the watch app.
 
 ### Alarms on the watch
 

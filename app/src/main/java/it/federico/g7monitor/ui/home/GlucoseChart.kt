@@ -40,6 +40,11 @@ import kotlin.math.abs
 import it.federico.g7monitor.R
 import it.federico.g7monitor.str
 import it.federico.g7monitor.predict.GlucoseModel
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.luminance
+import it.federico.g7monitor.data.ChartEvent
+import it.federico.g7monitor.data.EventType
 
 /**
  * Glucose chart drawn directly on a Canvas: target band, gridlines, points coloured
@@ -66,6 +71,14 @@ fun GlucoseChart(
     forecast: List<GlucoseModel.Point> = emptyList(),
     /** Sensor changes: a dashed line across the chart, labelled at the top. */
     sensorStarts: List<Long> = emptyList(),
+    /** false while looking at the past: [now] is then the end of the chart, without the "now" line. */
+    live: Boolean = true,
+    /** Notes: tags on the time axis, coloured by kind. */
+    events: List<ChartEvent> = emptyList(),
+    /** A tag touched: edit that note. */
+    onEventClick: (ChartEvent) -> Unit = {},
+    /** Finger held on the chart: add a note at that time. */
+    onLongPress: (Long) -> Unit = {},
 ) {
     val range = LocalRangeColors.current
     val scheme = MaterialTheme.colorScheme
@@ -76,13 +89,20 @@ fun GlucoseChart(
     val meterLabelStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = scheme.surface)
     val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     var touchX by remember { mutableStateOf<Float?>(null) }
+    val hits = remember { ChartHits() }
+    val eventClick by rememberUpdatedState(onEventClick)
+    val longPress by rememberUpdatedState(onLongPress)
 
     Canvas(
         modifier
             .fillMaxWidth()
             .height(height)
             .pointerInput(Unit) {
-                detectTapGestures(onPress = { touchX = it.x; tryAwaitRelease(); touchX = null })
+                detectTapGestures(
+                    onPress = { touchX = it.x; tryAwaitRelease(); touchX = null },
+                    onTap = { p -> hits.eventAt(p, 6.dp.toPx())?.let { eventClick(it) } },
+                    onLongPress = { p -> hits.timeAt(p.x)?.let { longPress(it) } },
+                )
             }
             .pointerInput(Unit) {
                 // Horizontal only, so the page can still scroll vertically over the chart.
@@ -101,7 +121,7 @@ fun GlucoseChart(
 
         val start = now - windowHours * 3_600_000L
         // Small breathing room on the right, or the forecast hour.
-        val end = maxOf(now + windowHours * 3_600_000L / 30, forecast.maxOfOrNull { it.time + 5 * 60_000L } ?: 0L)
+        val end = if (!live) now else maxOf(now + windowHours * 3_600_000L / 30, forecast.maxOfOrNull { it.time + 5 * 60_000L } ?: 0L)
         val maxData = readings.maxOfOrNull { it.mgdl } ?: 0
         val minData = readings.minOfOrNull { it.mgdl } ?: 400
         val yMax = maxOf(250, ((maxData + 25) / 50 + 1) * 50).coerceAtMost(400).toFloat()
@@ -250,9 +270,39 @@ fun GlucoseChart(
             drawText(sensorLabel, topLeft = Offset(lx, topPad + 2.dp.toPx()))
         }
 
+        // Notes: a tag on the time axis, coloured by kind (tap to edit); tags that would overlap
+        // go up a row.
+        hits.start = start; hits.end = end; hits.left = leftPad; hits.width = plotW
+        hits.tags.clear()
+        val dark = scheme.surface.luminance() < 0.5f
+        val tagStyle = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = scheme.surface)
+        val rowEnds = FloatArray(3) { Float.NEGATIVE_INFINITY }
+        for (e in events) {
+            if (e.timestamp < start || e.timestamp > end) continue
+            val color = eventColor(e.type, dark)
+            val m = measurer.measure(e.label, tagStyle)
+            val padX = 5.dp.toPx(); val padY = 2.dp.toPx(); val gap = 2.dp.toPx()
+            val tw = m.size.width + padX * 2; val th = m.size.height + padY * 2
+            val cx = x(e.timestamp)
+            val tx = (cx - tw / 2).coerceIn(leftPad, size.width - tw)
+            val free = rowEnds.indexOfFirst { it + gap <= tx }
+            val row = if (free >= 0) free else rowEnds.indices.minBy { rowEnds[it] }
+            rowEnds[row] = tx + tw
+            val ty = topPad + plotH - th - 3.dp.toPx() - row * (th + gap)
+            drawLine(
+                color.copy(alpha = 0.4f), Offset(cx, topPad), Offset(cx, ty), 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 4.dp.toPx())),
+            )
+            drawRoundRect(color, Offset(tx, ty), Size(tw, th), CornerRadius(th / 2))
+            drawText(m, topLeft = Offset(tx + padX, ty + padY))
+            hits.tags += Rect(tx, ty, tx + tw, ty + th) to e
+        }
+
         // "Now" marker
-        val nowX = x(now)
-        drawLine(scheme.primary.copy(alpha = 0.35f), Offset(nowX, topPad), Offset(nowX, topPad + plotH), 1.5f)
+        if (live) {
+            val nowX = x(now)
+            drawLine(scheme.primary.copy(alpha = 0.35f), Offset(nowX, topPad), Offset(nowX, topPad + plotH), 1.5f)
+        }
 
         // Touch inspection: a meter result close to the finger wins, compared with the sensor.
         val tx = touchX
@@ -296,4 +346,26 @@ fun GlucoseChart(
             drawText(m, topLeft = Offset(bx + pad, by + pad / 2))
         }
     }
+}
+
+/** Where the last frame drew the chart and the note tags: written while drawing, read by the taps. */
+private class ChartHits {
+    var start = 0L
+    var end = 0L
+    var left = 0f
+    var width = 0f
+    val tags = ArrayList<Pair<Rect, ChartEvent>>()
+
+    /** The tag under the finger (the one drawn last wins), with some room around it. */
+    fun eventAt(p: Offset, slop: Float): ChartEvent? = tags.lastOrNull { it.first.inflate(slop).contains(p) }?.second
+
+    fun timeAt(x: Float): Long? = if (width <= 0f || x < left) null else start + ((x - left) / width * (end - start)).toLong()
+}
+
+/** One colour per kind of note, the same as on the website. */
+fun eventColor(type: EventType, dark: Boolean): Color = when (type) {
+    EventType.Insulin -> if (dark) Color(0xFF38BDF8) else Color(0xFF0284C7)
+    EventType.Carbs -> if (dark) Color(0xFFFBBF24) else Color(0xFFD97706)
+    EventType.Exercise -> if (dark) Color(0xFF34D399) else Color(0xFF059669)
+    EventType.Note -> if (dark) Color(0xFF94A3B8) else Color(0xFF64748B)
 }

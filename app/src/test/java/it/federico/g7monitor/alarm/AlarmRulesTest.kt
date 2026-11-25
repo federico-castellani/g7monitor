@@ -25,6 +25,20 @@ class AlarmRulesTest {
     }
 
     @Test
+    fun `low predicted only when on, above the threshold now and below it within 30 min`() {
+        val on = defaults + (AlarmType.PredictedLow to AlarmConfig(AlarmType.PredictedLow, enabled = true))
+        val falling = listOf(r(5, 90), r(0, 85))
+        fun at(predicted: Int?, configs: Map<AlarmType, AlarmConfig> = on) =
+            AlarmRules.triggered(configs, falling, falling.last().timestamp, now, receiving = true, warmingUp = false, predictedLow = predicted)
+        assertEquals(setOf(AlarmType.PredictedLow), at(62))
+        assertEquals(emptySet<AlarmType>(), at(62, defaults)) // off by default
+        assertEquals(emptySet<AlarmType>(), at(75)) // stays above
+        assertEquals(emptySet<AlarmType>(), at(null)) // still learning
+        // Already low: the low alarm speaks, not the prediction.
+        assertEquals(setOf(AlarmType.Low), AlarmRules.triggered(on, listOf(r(0, 65)), now, now, true, false, predictedLow = 50))
+    }
+
+    @Test
     fun `urgent low hides the milder low`() {
         assertEquals(setOf(AlarmType.Low), check(listOf(r(0, 65))))
         assertEquals(setOf(AlarmType.UrgentLow), check(listOf(r(0, 55))))

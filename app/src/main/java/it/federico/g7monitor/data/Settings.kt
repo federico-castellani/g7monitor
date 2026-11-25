@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
 
 private val Context.dataStore by preferencesDataStore("settings")
 
@@ -42,6 +43,10 @@ data class AppSettings(
     val statusBarNumber: Boolean = false,
     /** The personal forecast (dashed line) on the home chart. */
     val chartForecast: Boolean = true,
+    /** Notifications before the end of the sensor's 10 days. */
+    val sensorReminder: Boolean = true,
+    /** Readings written to Health Connect (sensor mode). */
+    val healthConnect: Boolean = false,
     val collectorEnabled: Boolean = false,
     val sensorMac: String? = null,
     val sessionStart: Long? = null,
@@ -94,6 +99,8 @@ class SettingsRepository(private val context: Context) {
         val chartHours = intPreferencesKey("chart_hours")
         val statusNumber = booleanPreferencesKey("status_bar_number")
         val forecast = booleanPreferencesKey("chart_forecast")
+        val sensorReminder = booleanPreferencesKey("sensor_reminder")
+        val healthConnect = booleanPreferencesKey("health_connect")
         val low = intPreferencesKey("low")
         val high = intPreferencesKey("high")
         val enabled = booleanPreferencesKey("collector_enabled")
@@ -131,6 +138,56 @@ class SettingsRepository(private val context: Context) {
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
 
+    // ---------------------------------------------------------------- backup (see SettingsBackup)
+
+    private val backupBooleans = listOf(K.mmol, K.dots, K.chartMeter, K.statusNumber, K.forecast, K.sensorReminder, K.wifiOnly)
+    private val backupInts = listOf(K.smoothing, K.chartHours, K.uploadInterval)
+    /** Address or account name, and the token or secret without which it is only text in a form. */
+    private val backupLinks = listOf(
+        K.serverUrl to K.serverToken, K.serverUser to K.serverToken,
+        K.followUrl to K.followToken, K.followUser to K.followToken,
+        K.nsUrl to K.nsSecret,
+    )
+
+    /** Preferences only: never a token, a secret, the sensor's key or a certificate. */
+    suspend fun backup(): JSONObject {
+        val p = context.dataStore.data.first()
+        val o = JSONObject()
+        for (k in backupBooleans) p[k]?.let { o.put(k.name, it) }
+        for (k in backupInts + listOf(K.low, K.high)) p[k]?.let { o.put(k.name, it) }
+        p[K.code]?.takeIf { it.isNotBlank() }?.let { o.put(K.code.name, it) }
+        for ((k, _) in backupLinks) p[k]?.takeIf { it.isNotBlank() }?.let { o.put(k.name, it) }
+        return o
+    }
+
+    /**
+     * Sets what [o] has (the pairing code apart: see SettingsBackup). Addresses are restored only
+     * where nothing is linked, so a working link is never pointed somewhere else.
+     * @return how many settings were restored
+     */
+    suspend fun restore(o: JSONObject): Int {
+        var n = 0
+        context.dataStore.edit { p ->
+            for (k in backupBooleans) (o.opt(k.name) as? Boolean)?.let { p[k] = it; n++ }
+            for (k in backupInts) (o.opt(k.name) as? Number)?.let { p[k] = it.toInt(); n++ }
+            val low = (o.opt(K.low.name) as? Number)?.toInt()
+            val high = (o.opt(K.high.name) as? Number)?.toInt()
+            if (low != null && high != null && low in 40..200 && high in 100..400 && low < high) {
+                p[K.low] = low
+                p[K.high] = high
+                n += 2
+            }
+            for ((k, linked) in backupLinks) {
+                val v = o.optString(k.name)
+                if (v.isNotBlank() && p[linked].isNullOrBlank()) {
+                    p[k] = v
+                    n++
+                }
+            }
+        }
+        return n
+    }
+
     suspend fun current(): AppSettings = settings.first()
 
     private fun Preferences.toSettings() = AppSettings(
@@ -147,6 +204,8 @@ class SettingsRepository(private val context: Context) {
         chartHours = this[K.chartHours] ?: 6,
         statusBarNumber = this[K.statusNumber] ?: false,
         chartForecast = this[K.forecast] ?: true,
+        sensorReminder = this[K.sensorReminder] ?: true,
+        healthConnect = this[K.healthConnect] ?: false,
         collectorEnabled = this[K.enabled] ?: false,
         sensorMac = this[K.mac],
         sessionStart = this[K.session],
@@ -235,6 +294,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setChartHours(hours: Int) = context.dataStore.edit { it[K.chartHours] = hours }
     suspend fun setStatusBarNumber(v: Boolean) = context.dataStore.edit { it[K.statusNumber] = v }
     suspend fun setChartForecast(v: Boolean) = context.dataStore.edit { it[K.forecast] = v }
+    suspend fun setSensorReminder(v: Boolean) = context.dataStore.edit { it[K.sensorReminder] = v }
+    suspend fun setHealthConnect(v: Boolean) = context.dataStore.edit { it[K.healthConnect] = v }
     suspend fun setRange(low: Int, high: Int) = context.dataStore.edit { it[K.low] = low; it[K.high] = high }
     suspend fun setCollectorEnabled(v: Boolean) = context.dataStore.edit { it[K.enabled] = v }
     suspend fun setSensorMac(mac: String?) = context.dataStore.edit { if (mac == null) it.remove(K.mac) else it[K.mac] = mac }

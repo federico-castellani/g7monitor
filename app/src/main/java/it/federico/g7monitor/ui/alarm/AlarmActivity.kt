@@ -53,7 +53,7 @@ class AlarmActivity : ComponentActivity() {
                 val a = alarm ?: return@G7Theme
                 val range = LocalRangeColors.current
                 val color = when (a.type) {
-                    AlarmType.UrgentLow, AlarmType.Low, AlarmType.FallingFast -> range.low
+                    AlarmType.UrgentLow, AlarmType.Low, AlarmType.PredictedLow, AlarmType.FallingFast -> range.low
                     AlarmType.UrgentHigh, AlarmType.High, AlarmType.RisingFast -> range.high
                     AlarmType.SignalLoss -> MaterialTheme.colorScheme.primary
                 }

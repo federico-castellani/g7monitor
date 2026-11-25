@@ -76,6 +76,11 @@ class NightscoutUploader(private val app: G7App) {
                 sent += batch.size
                 if (batch.size < BATCH) break
             }
+            val events = app.readings.pendingEvents(UploadTarget.Nightscout)
+            if (events.isNotEmpty()) {
+                NightscoutApi.uploadEvents(s.nightscoutUrl, s.nightscoutSecret, events)
+                app.readings.markEventsUploaded(events, UploadTarget.Nightscout)
+            }
             val starts = app.readings.pendingSensorStarts(UploadTarget.Nightscout)
             if (starts.isNotEmpty()) {
                 NightscoutApi.uploadSensorStarts(s.nightscoutUrl, s.nightscoutSecret, starts)

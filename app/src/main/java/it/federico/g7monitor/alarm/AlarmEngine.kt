@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import it.federico.g7monitor.str
+import it.federico.g7monitor.predict.GlucoseModel
 
 /** The alarm on screen / ringing now. */
 /** @param test started from the settings ("Prova"): never snoozes nor hides a real alarm. */
@@ -61,10 +62,16 @@ class AlarmEngine(private val app: G7App) {
 
         val recent = app.readings.since(now - 30 * 60_000L)
         val newest = app.readings.newestTimestamp()
+        // The forecast only when its alarm is on: it is the one alarm that needs it.
+        prediction = if (configs[AlarmType.PredictedLow]?.enabled == true) {
+            val latest = recent.lastOrNull()
+            app.predictor.forecast().filter { latest != null && it.time - latest.timestamp <= PREDICTION_MS }.minByOrNull { it.mgdl }
+        } else null
         val triggered = AlarmRules.triggered(
             configs, recent, newest, now,
             receiving = s.collectorEnabled,
             warmingUp = app.status.value.sensorState == SensorState.WarmingUp,
+            predictedLow = prediction?.mgdl?.let { Math.round(it).toInt() },
         )
 
         // The ringing alarm is no longer true (or was disabled): stop it.
@@ -140,6 +147,14 @@ class AlarmEngine(private val app: G7App) {
     private fun fire(config: AlarmConfig, latest: GlucoseReading?, newest: Long?, now: Long, mmol: Boolean) {
         val text = when (config.type) {
             AlarmType.SignalLoss -> str(R.string.alarm_no_reading_for, newest?.let { ((now - it) / 60_000L).toString() } ?: "?")
+            AlarmType.PredictedLow -> {
+                val p = prediction
+                if (p == null || latest == null) ""
+                else str(
+                    R.string.alarm_predicted_now, Glucose.format(Math.round(p.mgdl).toInt(), mmol), Glucose.unit(mmol),
+                    ((p.time - now) / 60_000L).coerceAtLeast(1L).toInt(), Glucose.format(latest.mgdl, mmol),
+                )
+            }
             else -> latest?.let {
                 "${Glucose.format(it.mgdl, mmol)} ${Glucose.unit(mmol)} ${Glucose.arrow(it.trend)}".trim()
             } ?: ""
@@ -150,6 +165,9 @@ class AlarmEngine(private val app: G7App) {
         player.start(config, RING_MS)
         notifyAlarm(config, text)
     }
+
+    /** The lowest forecast point within [PREDICTION_MS], as of the last evaluation. */
+    private var prediction: GlucoseModel.Point? = null
 
     private fun clear() {
         _active.value?.let { app.getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID) }
@@ -227,6 +245,8 @@ class AlarmEngine(private val app: G7App) {
         private const val RESUME_CHECK = 14
         /** An unanswered alarm rings again after this long, if still true. */
         private const val REALERT_MS = 5 * 60_000L - 30_000L
+        /** How far ahead the "low predicted" alarm looks. */
+        private const val PREDICTION_MS = 30 * 60_000L
         private const val RING_MS = 2 * 60_000L
         private const val PREVIEW_MS = 4_000L
         private const val TEST_RING_MS = 30_000L

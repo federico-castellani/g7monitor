@@ -14,6 +14,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import it.federico.g7monitor.data.ChartEvent
+import it.federico.g7monitor.data.EventType
 
 /**
  * Minimal Nightscout uploader client (API v1), like xDrip's "Nightscout sync": sensor values as
@@ -48,6 +50,25 @@ object NightscoutApi {
 
     fun uploadFingersticks(base: String, secret: String, list: List<Fingerstick>) {
         send("POST", "$base/api/v1/treatments", secret, treatments(list).toString())
+    }
+
+    /** Notes on the chart, as the treatments Nightscout knows. */
+    fun uploadEvents(base: String, secret: String, list: List<ChartEvent>) {
+        send("POST", "$base/api/v1/treatments", secret, events(list).toString())
+    }
+
+    internal fun events(list: List<ChartEvent>): JSONArray = JSONArray().apply {
+        for (e in list) {
+            val o = JSONObject().put("created_at", iso(e.timestamp)).put("enteredBy", DEVICE)
+            when (e.type) {
+                EventType.Insulin -> o.put("eventType", "Correction Bolus").put("insulin", e.value)
+                EventType.Carbs -> o.put("eventType", "Carb Correction").put("carbs", e.value)
+                EventType.Exercise -> o.put("eventType", "Exercise").put("duration", e.value)
+                EventType.Note -> o.put("eventType", "Note")
+            }
+            if (e.note != null) o.put("notes", e.note)
+            put(o)
+        }
     }
 
     /** New sensors, as "Sensor Start" treatments (Nightscout shows the sensor age from them). */

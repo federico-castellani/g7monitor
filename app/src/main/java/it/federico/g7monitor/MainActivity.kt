@@ -78,7 +78,7 @@ private enum class Screen(val page: SettingsPage? = null) {
     Home, Alarms, Settings,
     SettingsSensor(SettingsPage.Sensor), SettingsService(SettingsPage.Service),
     SettingsDisplay(SettingsPage.Display), SettingsSource(SettingsPage.Source), SettingsUpdates(SettingsPage.Updates), SettingsWatch(SettingsPage.Watch), SettingsChart(SettingsPage.Chart),
-    SettingsNightscout(SettingsPage.Nightscout),
+    SettingsNightscout(SettingsPage.Nightscout), SettingsBackup(SettingsPage.Backup), SettingsHealth(SettingsPage.Health),
     Diagnostics, ServerAddress, ServerLogin, ServerStatus, AlarmDetail, Meter;
 
     companion object {
@@ -119,6 +119,12 @@ class MainActivity : ComponentActivity() {
 
     private val updateActions by lazy {
         UpdateActions(onCheck = { vm.checkForUpdates(true) }, onInstall = { vm.installUpdate(it) }, onReset = vm::resetUpdate)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Reopening the app shows the present, not the past the chart was scrolled to.
+        if (!isChangingConfigurations) vm.chartToNow()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -267,7 +273,7 @@ class MainActivity : ComponentActivity() {
                         when (screen) {
                             Screen.Settings -> SettingsScreen(settings, serviceRunning, update, settingsActions(enableCollector, openServer, open))
                             Screen.SettingsSensor, Screen.SettingsService, Screen.SettingsDisplay, Screen.SettingsSource, Screen.SettingsUpdates, Screen.SettingsWatch, Screen.SettingsChart,
-                            Screen.SettingsNightscout -> SettingsPageScreen(
+                            Screen.SettingsNightscout, Screen.SettingsBackup, Screen.SettingsHealth -> SettingsPageScreen(
                                 page = screen.page!!,
                                 settings = settings,
                                 serviceRunning = serviceRunning,
@@ -305,6 +311,8 @@ class MainActivity : ComponentActivity() {
                                 onTest = { delayed -> vm.testAlarm(alarmConfigs.getValue(AlarmType.UrgentLow), delayed) },
                                 pausedUntil = alarmsPausedUntil,
                                 onPause = pauseAlarms,
+                                sensorReminder = settings.sensorReminder,
+                                onSensorReminder = vm::setSensorReminder,
                             )
                             Screen.AlarmDetail -> {
                                 val config = alarmConfigs.getValue(alarmType)
@@ -386,6 +394,10 @@ class MainActivity : ComponentActivity() {
                             Screen.Home -> HomeScreen(
                                 state = state,
                                 onWindow = vm::setWindow,
+                                onScrollChart = vm::scrollChart,
+                                onChartNow = vm::chartToNow,
+                                onSaveEvent = { vm.saveEvent(it) },
+                                onDeleteEvent = { vm.deleteEvent(it) },
                                 onOpenSensorSettings = { open(Screen.SettingsSensor) },
                                 onOpenDiagnostics = { open(Screen.Diagnostics) },
                                 onOpenServer = openServer,

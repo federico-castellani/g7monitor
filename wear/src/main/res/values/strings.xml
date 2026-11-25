@@ -39,4 +39,10 @@
     <!-- Alarms from the phone -->
     <string name="w_channel_alarms">Glucose alarms</string>
     <string name="w_snooze">Snooze %1$d min</string>
+
+    <!-- 20_tile -->
+
+    <!-- Tile -->
+    <string name="tile_glucose">Glucose</string>
+    <string name="tile_at">at %1$s</string>
 </resources>

@@ -120,6 +120,7 @@ class G7Service : LifecycleService() {
                 // Upload right after new readings are stored, while the phone is awake anyway (also catches up at start).
                 scope.launch { app.readings.changes.collect { app.uploader.maybeUpload() } }
                 scope.launch { app.readings.changes.collect { app.nightscout.maybeUpload() } }
+                scope.launch { app.readings.changes.collect { app.health.write() } }
             }
             DataSource.Server -> scope.launch { follow() }
         }
